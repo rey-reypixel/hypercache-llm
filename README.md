@@ -21,4 +21,4 @@ The community edition is licensed under the GNU Affero General Public License v3
 
 Commercial users who need closed-source integration, proprietary modifications, or commercial redistribution must obtain a separate commercial license from the copyright holder.
 
-Contact: add your licensing email here before publishing the project.
+Commercial licensing contact: mahashreyaa@gmail.com
