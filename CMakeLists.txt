@@ -8,6 +8,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(HYPERCACHE_BUILD_TESTS "Build unit tests" ON)
 option(HYPERCACHE_BUILD_SERVER "Build HTTP server" ON)
 
+include(FetchContent)
+
+FetchContent_Declare(
+    httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(httplib)
+
 find_package(Threads QUIET)
 
 add_library(hypercache_core
@@ -15,7 +24,7 @@ add_library(hypercache_core
     src/similarity/similarity_engine.cpp
     src/telemetry/telemetry.cpp
 )
-target_include_directories(hypercache_core PUBLIC include)
+target_include_directories(hypercache_core PUBLIC include ${httplib_SOURCE_DIR}/include)
 target_compile_features(hypercache_core PUBLIC cxx_std_20)
 if(Threads_FOUND)
     target_link_libraries(hypercache_core PUBLIC Threads::Threads)
@@ -31,9 +40,9 @@ if(HYPERCACHE_BUILD_SERVER)
     add_executable(hypercache_server
         src/server/app.cpp
     )
-    target_link_libraries(hypercache_server PRIVATE hypercache_core)
+    target_link_libraries(hypercache_server PRIVATE hypercache_core httplib::httplib)
     target_compile_features(hypercache_server PRIVATE cxx_std_20)
-    target_include_directories(hypercache_server PRIVATE include)
+    target_include_directories(hypercache_server PRIVATE include ${httplib_SOURCE_DIR}/include)
 endif()
 
 if(HYPERCACHE_BUILD_TESTS)
