@@ -6,18 +6,34 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(HYPERCACHE_BUILD_TESTS "Build unit tests" ON)
+option(HYPERCACHE_BUILD_SERVER "Build HTTP server" ON)
+
+find_package(Threads QUIET)
 
 add_library(hypercache_core
     src/cache/lru_cache.cpp
     src/similarity/similarity_engine.cpp
+    src/telemetry/telemetry.cpp
 )
 target_include_directories(hypercache_core PUBLIC include)
 target_compile_features(hypercache_core PUBLIC cxx_std_20)
+if(Threads_FOUND)
+    target_link_libraries(hypercache_core PUBLIC Threads::Threads)
+endif()
 
 if(MSVC)
     target_compile_options(hypercache_core PRIVATE /W4 /permissive-)
 else()
     target_compile_options(hypercache_core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(HYPERCACHE_BUILD_SERVER)
+    add_executable(hypercache_server
+        src/server/app.cpp
+    )
+    target_link_libraries(hypercache_server PRIVATE hypercache_core)
+    target_compile_features(hypercache_server PRIVATE cxx_std_20)
+    target_include_directories(hypercache_server PRIVATE include)
 endif()
 
 if(HYPERCACHE_BUILD_TESTS)
