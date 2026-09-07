@@ -20,3 +20,4 @@ CMakeFiles/
 .nuget
 .packages
 packages.config
+include/httplib.h
