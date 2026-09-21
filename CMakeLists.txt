@@ -83,6 +83,7 @@ if(HYPERCACHE_BUILD_TESTS)
             tests/cache/lru_cache_test.cpp
             tests/cache/lru_cache_backend_test.cpp
             tests/similarity/similarity_engine_test.cpp
+            tests/telemetry/telemetry_test.cpp
         )
         target_link_libraries(hypercache_tests PRIVATE hypercache_core GTest::gtest_main)
         if(HYPERCACHE_BUILD_REDIS)

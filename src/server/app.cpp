@@ -31,6 +31,9 @@ std::string json_telemetry() {
     j["request_tokens"] = get_telemetry().get_request_tokens();
     j["streaming_tokens"] = get_telemetry().get_streaming_tokens();
     j["total_requests"] = get_telemetry().get_total_requests();
+    j["cache_hits"] = get_telemetry().get_cache_hits();
+    j["cache_misses"] = get_telemetry().get_cache_misses();
+    j["errors"] = get_telemetry().get_errors();
     return j.dump();
 }
 
@@ -101,8 +104,10 @@ void App::run() {
         auto result = cache_->get(req.matches[1]);
         get_telemetry().record_request(1);
         if (result.has_value()) {
+            get_telemetry().record_cache_hit();
             res.set_content(result.value(), "text/plain");
         } else {
+            get_telemetry().record_cache_miss();
             res.status = 404;
             json j;
             j["error"] = "Key not found";
@@ -137,6 +142,16 @@ void App::run() {
         res.set_content(json_telemetry(), "application/json");
     });
 
+    svr.Get("/metrics", [&](const httplib::Request&, httplib::Response& res) {
+        get_telemetry().record_request(1);
+        res.set_content(get_telemetry().to_prometheus(), "text/plain; version=0.0.4");
+    });
+
+    svr.Get("/metrics/json", [&](const httplib::Request&, httplib::Response& res) {
+        get_telemetry().record_request(1);
+        res.set_content(get_telemetry().to_json(), "application/json");
+    });
+
     svr.Post("/similarity", [&](const httplib::Request& req, httplib::Response& res) {
         get_telemetry().record_request(1);
         try {
@@ -153,11 +168,13 @@ void App::run() {
             float sim = hypercache::similarity::SimilarityEngine::cosine_similarity(lhs, rhs);
             res.set_content(json_similarity(sim), "application/json");
         } catch (const json::parse_error& e) {
+            get_telemetry().record_error();
             res.status = 400;
             json err;
             err["error"] = "Invalid JSON: " + std::string(e.what());
             res.set_content(err.dump(), "application/json");
         } catch (const std::exception& e) {
+            get_telemetry().record_error();
             res.status = 400;
             json err;
             err["error"] = e.what();
