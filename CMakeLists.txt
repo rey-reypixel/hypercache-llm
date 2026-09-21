@@ -25,6 +25,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(hiredis)
 
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
 find_package(Threads QUIET)
 
 add_library(hypercache_core
@@ -60,7 +67,7 @@ if(HYPERCACHE_BUILD_SERVER)
     add_executable(hypercache_server
         src/server/app.cpp
     )
-    target_link_libraries(hypercache_server PRIVATE hypercache_core httplib::httplib)
+    target_link_libraries(hypercache_server PRIVATE hypercache_core httplib::httplib nlohmann_json::nlohmann_json)
     if(HYPERCACHE_BUILD_REDIS)
         target_link_libraries(hypercache_server PRIVATE hypercache_redis)
     endif()

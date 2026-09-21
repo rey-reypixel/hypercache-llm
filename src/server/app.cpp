@@ -4,11 +4,13 @@
 #include "hypercache/similarity/similarity_engine.hpp"
 
 #include "httplib.h"
+#include "nlohmann/json.hpp"
 
 #include <string>
 #include <sstream>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #ifdef HYPERCACHE_BUILD_REDIS
 #include "hypercache/cache/redis_cache_backend.hpp"
@@ -18,40 +20,33 @@ namespace hypercache::server {
 
 namespace {
 
+using json = nlohmann::json;
+
 auto& get_telemetry() {
     return hypercache::telemetry::TokenTelemetry::instance();
 }
 
 std::string json_telemetry() {
-    std::ostringstream oss;
-    oss << "{\"request_tokens\":" << get_telemetry().get_request_tokens()
-        << ",\"streaming_tokens\":" << get_telemetry().get_streaming_tokens()
-        << ",\"total_requests\":" << get_telemetry().get_total_requests()
-        << "}";
-    return oss.str();
+    json j;
+    j["request_tokens"] = get_telemetry().get_request_tokens();
+    j["streaming_tokens"] = get_telemetry().get_streaming_tokens();
+    j["total_requests"] = get_telemetry().get_total_requests();
+    return j.dump();
 }
 
 std::string json_similarity(float sim) {
-    std::ostringstream oss;
-    oss << "{\"similarity\":" << sim << "}";
-    return oss.str();
+    json j;
+    j["similarity"] = sim;
+    return j.dump();
 }
 
-std::vector<float> parse_float_array(const std::string& json_str, const std::string& key) {
+std::vector<float> parse_float_array(const json& j, const std::string& key) {
     std::vector<float> result;
-    size_t pos = json_str.find("\"" + key + "\"");
-    if (pos == std::string::npos) return result;
-    pos = json_str.find('[', pos);
-    if (pos == std::string::npos) return result;
-    size_t end = json_str.find(']', pos);
-    std::string arr = json_str.substr(pos + 1, end - pos - 1);
-    std::istringstream iss(arr);
-    std::string token;
-    while (std::getline(iss, token, ',')) {
-        token.erase(0, token.find_first_of("0123456789-."));
-        token.erase(token.find_last_of("0123456789-.\"") + 1);
-        if (!token.empty()) {
-            result.push_back(std::stof(token));
+    if (j.contains(key) && j[key].is_array()) {
+        for (const auto& val : j[key]) {
+            if (val.is_number()) {
+                result.push_back(val.get<float>());
+            }
         }
     }
     return result;
@@ -96,7 +91,10 @@ void App::run() {
     httplib::Server svr;
 
     svr.Get("/health", [](const httplib::Request&, httplib::Response& res) {
-        res.set_content(R"({"status":"ok","uptime":"running"})", "application/json");
+        json j;
+        j["status"] = "ok";
+        j["uptime"] = "running";
+        res.set_content(j.dump(), "application/json");
     });
 
     svr.Get("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
@@ -106,27 +104,33 @@ void App::run() {
             res.set_content(result.value(), "text/plain");
         } else {
             res.status = 404;
-            res.set_content("Key not found", "text/plain");
+            json j;
+            j["error"] = "Key not found";
+            res.set_content(j.dump(), "application/json");
         }
     });
 
     svr.Put("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
         cache_->put(req.matches[1], req.body);
         get_telemetry().record_request(1);
-        res.set_content("Cached", "text/plain");
+        json j;
+        j["status"] = "cached";
+        res.set_content(j.dump(), "application/json");
     });
 
     svr.Delete("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
         cache_->remove(req.matches[1]);
         get_telemetry().record_request(1);
-        res.set_content("Removed", "text/plain");
+        json j;
+        j["status"] = "removed";
+        res.set_content(j.dump(), "application/json");
     });
 
     svr.Get("/cache", [&](const httplib::Request&, httplib::Response& res) {
         get_telemetry().record_request(1);
-        std::ostringstream oss;
-        oss << "{\"size\":" << cache_->size() << "}";
-        res.set_content(oss.str(), "application/json");
+        json j;
+        j["size"] = cache_->size();
+        res.set_content(j.dump(), "application/json");
     });
 
     svr.Get("/telemetry", [&](const httplib::Request&, httplib::Response& res) {
@@ -136,18 +140,28 @@ void App::run() {
     svr.Post("/similarity", [&](const httplib::Request& req, httplib::Response& res) {
         get_telemetry().record_request(1);
         try {
-            auto lhs = parse_float_array(req.body, "lhs");
-            auto rhs = parse_float_array(req.body, "rhs");
+            auto j = json::parse(req.body);
+            auto lhs = parse_float_array(j, "lhs");
+            auto rhs = parse_float_array(j, "rhs");
             if (lhs.empty() || rhs.empty() || lhs.size() != rhs.size()) {
                 res.status = 400;
-                res.set_content("Invalid vectors", "text/plain");
+                json err;
+                err["error"] = "Invalid vectors: lhs and rhs must be non-empty arrays of equal length";
+                res.set_content(err.dump(), "application/json");
                 return;
             }
             float sim = hypercache::similarity::SimilarityEngine::cosine_similarity(lhs, rhs);
             res.set_content(json_similarity(sim), "application/json");
+        } catch (const json::parse_error& e) {
+            res.status = 400;
+            json err;
+            err["error"] = "Invalid JSON: " + std::string(e.what());
+            res.set_content(err.dump(), "application/json");
         } catch (const std::exception& e) {
             res.status = 400;
-            res.set_content(e.what(), "text/plain");
+            json err;
+            err["error"] = e.what();
+            res.set_content(err.dump(), "application/json");
         }
     });
 
@@ -203,7 +217,7 @@ int main(int argc, char* argv[]) {
             cache_config.redis_pool_max = std::stoull(argv[++i]);
         } else if (arg == "--redis-connect-timeout" && i + 1 < argc) {
             cache_config.redis_connect_timeout = std::chrono::milliseconds(std::stoll(argv[++i]));
-        } else if (arg == "--redis-acquire-timeout" && i + 1 < argc) {
+        } else if (arg == "--redis-acquire-timeout" && i + 1 <argc) {
             cache_config.redis_acquire_timeout = std::chrono::milliseconds(std::stoll(argv[++i]));
         } else if (arg == "--lru-capacity" && i + 1 < argc) {
             cache_config.lru_capacity = std::stoull(argv[++i]);
