@@ -68,8 +68,16 @@ App::App(unsigned short port, CacheConfig cache_config)
             break;
         case CacheBackendType::Redis:
 #ifdef HYPERCACHE_BUILD_REDIS
-            cache_ = std::make_unique<hypercache::cache::RedisCacheBackend>(
-                cache_config_.redis_host, cache_config_.redis_port);
+            {
+                hypercache::cache::RedisCacheBackend::Config redis_cfg;
+                redis_cfg.host = cache_config_.redis_host;
+                redis_cfg.port = cache_config_.redis_port;
+                redis_cfg.pool_min = cache_config_.redis_pool_min;
+                redis_cfg.pool_max = cache_config_.redis_pool_max;
+                redis_cfg.connect_timeout = cache_config_.redis_connect_timeout;
+                redis_cfg.acquire_timeout = cache_config_.redis_acquire_timeout;
+                cache_ = std::make_unique<hypercache::cache::RedisCacheBackend>(std::move(redis_cfg));
+            }
             if (!cache_->connect()) {
                 throw std::runtime_error("Failed to connect to Redis at " +
                     cache_config_.redis_host + ":" + std::to_string(cache_config_.redis_port));
@@ -189,17 +197,29 @@ int main(int argc, char* argv[]) {
             cache_config.redis_host = argv[++i];
         } else if (arg == "--redis-port" && i + 1 < argc) {
             cache_config.redis_port = std::stoi(argv[++i]);
+        } else if (arg == "--redis-pool-min" && i + 1 < argc) {
+            cache_config.redis_pool_min = std::stoull(argv[++i]);
+        } else if (arg == "--redis-pool-max" && i + 1 < argc) {
+            cache_config.redis_pool_max = std::stoull(argv[++i]);
+        } else if (arg == "--redis-connect-timeout" && i + 1 < argc) {
+            cache_config.redis_connect_timeout = std::chrono::milliseconds(std::stoll(argv[++i]));
+        } else if (arg == "--redis-acquire-timeout" && i + 1 < argc) {
+            cache_config.redis_acquire_timeout = std::chrono::milliseconds(std::stoll(argv[++i]));
         } else if (arg == "--lru-capacity" && i + 1 < argc) {
             cache_config.lru_capacity = std::stoull(argv[++i]);
         } else if (arg == "--help") {
             std::cout << "Usage: hypercache_server [options]\n"
                       << "Options:\n"
-                      << "  --port PORT           Server port (default: 18080)\n"
-                      << "  --cache TYPE          Cache backend: lru|redis (default: lru)\n"
-                      << "  --redis-host HOST     Redis host (default: 127.0.0.1)\n"
-                      << "  --redis-port PORT     Redis port (default: 6379)\n"
-                      << "  --lru-capacity SIZE   LRU cache capacity (default: 128)\n"
-                      << "  --help                Show this help\n";
+                      << "  --port PORT                    Server port (default: 18080)\n"
+                      << "  --cache TYPE                   Cache backend: lru|redis (default: lru)\n"
+                      << "  --redis-host HOST              Redis host (default: 127.0.0.1)\n"
+                      << "  --redis-port PORT              Redis port (default: 6379)\n"
+                      << "  --redis-pool-min SIZE          Redis pool min connections (default: 2)\n"
+                      << "  --redis-pool-max SIZE          Redis pool max connections (default: 10)\n"
+                      << "  --redis-connect-timeout MS     Redis connect timeout ms (default: 5000)\n"
+                      << "  --redis-acquire-timeout MS     Redis acquire timeout ms (default: 2000)\n"
+                      << "  --lru-capacity SIZE            LRU cache capacity (default: 128)\n"
+                      << "  --help                         Show this help\n";
             return 0;
         }
     }

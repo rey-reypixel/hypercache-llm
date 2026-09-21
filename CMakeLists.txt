@@ -49,6 +49,7 @@ if(HYPERCACHE_BUILD_REDIS)
     add_library(hypercache_redis
         src/cache/redis_cache.cpp
         src/cache/redis_cache_backend.cpp
+        src/cache/redis_connection_pool.cpp
     )
     target_include_directories(hypercache_redis PUBLIC include ${hiredis_SOURCE_DIR})
     target_link_libraries(hypercache_redis PRIVATE hypercache_core hiredis::hiredis)
@@ -82,6 +83,7 @@ if(HYPERCACHE_BUILD_TESTS)
             add_executable(hypercache_redis_tests
                 tests/cache/redis_cache_test.cpp
                 tests/cache/redis_cache_backend_test.cpp
+                tests/cache/redis_connection_pool_test.cpp
             )
             target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
         endif()

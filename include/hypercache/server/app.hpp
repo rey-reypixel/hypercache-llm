@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <chrono>
 
 namespace hypercache::cache {
 class CacheBackend;
@@ -19,6 +20,10 @@ struct CacheConfig {
     std::size_t lru_capacity = 128;
     std::string redis_host = "127.0.0.1";
     int redis_port = 6379;
+    std::size_t redis_pool_min = 2;
+    std::size_t redis_pool_max = 10;
+    std::chrono::milliseconds redis_connect_timeout = std::chrono::seconds(5);
+    std::chrono::milliseconds redis_acquire_timeout = std::chrono::seconds(2);
 };
 
 class App {
