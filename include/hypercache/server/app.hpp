@@ -1,13 +1,10 @@
 #pragma once
 
-#include <string>
-#include <cstdint>
-
 namespace hypercache::server {
 
 class App {
 public:
-    explicit App(unsigned short port = 18080);
+    explicit App(unsigned short port);
     ~App();
 
     void run();
