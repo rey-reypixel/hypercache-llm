@@ -5,40 +5,188 @@ High-performance LLM telemetry and cache gateway built with C++20.
 HyperCache-LLM is designed to sit in front of LLM APIs and provide:
 
 - Token telemetry for request and streaming-response workflows
-- A thread-safe LRU cache for prompt and embedding lookups
+- Configurable cache backends: thread-safe LRU (in-memory) or Redis (distributed)
+- Redis connection pooling with configurable min/max connections and idle reaper
 - SIMD-friendly vector similarity calculations
 - REST and Server-Sent Events (SSE) endpoints using cpp-httplib
-- Redis integration for shared cache storage
+- Proper JSON request/response handling via nlohmann/json
+- Containerized deployment with Docker and docker-compose
 - GoogleTest coverage for cache behavior and concurrent access
+
+## Features
+
+### Cache Backends
+
+| Backend | Description | Use Case |
+|---------|-------------|----------|
+| **LRU** | In-memory, thread-safe, O(1) operations | Single instance, low latency |
+| **Redis** | Distributed, persistent, connection pooled | Multi-instance, shared cache |
+
+### Redis Connection Pool
+
+- Configurable min/max connections
+- Thread-safe acquire/release with timeout
+- Background idle connection reaper
+- Pool statistics endpoint
+
+### JSON API
+
+All endpoints return structured JSON. Errors follow `{"error": "message"}` format.
 
 ## Building
 
+### From Source
+
 ```bash
-cmake -B build -DHYPERCACHE_BUILD_SERVER=ON
+# With Redis support (default)
+cmake -B build -DHYPERCACHE_BUILD_SERVER=ON -DHYPERCACHE_BUILD_REDIS=ON
 cmake --build build --config Release
+
+# LRU only (no Redis dependency)
+cmake -B build -DHYPERCACHE_BUILD_SERVER=ON -DHYPERCACHE_BUILD_REDIS=OFF
+cmake --build build --config Release
+
+# Run tests
+cmake -B build -DHYPERCACHE_BUILD_TESTS=ON
+cmake --build build --config Release
+./build/hypercache_tests
 ```
 
-The server runs on port 18080 with these endpoints:
+### With Docker
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /health | Health check |
-| GET | /cache/:key | Lookup cache entry |
-| PUT | /cache/:key | Store cache entry |
-| DELETE | /cache/:key | Remove cache entry |
-| GET | /cache | Cache info |
-| GET | /telemetry | Token telemetry |
-| POST | /similarity | Compute cosine similarity |
-| GET | /stream | SSE stream |
+```bash
+# Build image
+docker build -t hypercache-llm .
+
+# Run with LRU cache (default)
+docker run -p 18080:18080 hypercache-llm
+
+# Run with Redis backend
+docker run -p 18080:18080 \
+  -e CACHE_TYPE=redis \
+  -e REDIS_HOST=host.docker.internal \
+  hypercache-llm
+
+# Development stack (Redis + HyperCache)
+docker-compose up --build
+```
+
+## Running the Server
+
+### Command Line Options
+
+```bash
+./build/hypercache_server [options]
+
+Options:
+  --port PORT                    Server port (default: 18080)
+  --cache TYPE                   Cache backend: lru|redis (default: lru)
+  --redis-host HOST              Redis host (default: 127.0.0.1)
+  --redis-port PORT              Redis port (default: 6379)
+  --redis-pool-min SIZE          Redis pool min connections (default: 2)
+  --redis-pool-max SIZE          Redis pool max connections (default: 10)
+  --redis-connect-timeout MS     Redis connect timeout ms (default: 5000)
+  --redis-acquire-timeout MS     Redis acquire timeout ms (default: 2000)
+  --lru-capacity SIZE            LRU cache capacity (default: 128)
+  --help                         Show this help
+```
+
+### Environment Variables (Docker)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CACHE_TYPE` | `lru` | Cache backend: `lru` or `redis` |
+| `REDIS_HOST` | `redis` | Redis hostname |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_POOL_MIN` | `2` | Min pool connections |
+| `REDIS_POOL_MAX` | `10` | Max pool connections |
+
+## API Endpoints
+
+| Method | Path | Description | Request Body | Response |
+|--------|------|-------------|--------------|----------|
+| GET | `/health` | Health check | - | `{"status":"ok","uptime":"running"}` |
+| GET | `/cache/:key` | Get cache entry | - | Value (text/plain) or 404 |
+| PUT | `/cache/:key` | Store cache entry | Raw body | `{"status":"cached"}` |
+| DELETE | `/cache/:key` | Remove cache entry | - | `{"status":"removed"}` |
+| GET | `/cache` | Cache info | - | `{"size":N}` |
+| GET | `/telemetry` | Token telemetry | - | `{"request_tokens":N,"streaming_tokens":N,"total_requests":N}` |
+| POST | `/similarity` | Cosine similarity | `{"lhs":[...],"rhs":[...]}` | `{"similarity":0.5}` |
+| GET | `/stream` | SSE stream demo | - | `text/event-stream` |
+
+### Example Requests
+
+**Store a prompt:**
+```bash
+curl -X PUT http://localhost:18080/cache/my-prompt \
+  -d "What is the capital of France?"
+```
+
+**Retrieve:**
+```bash
+curl http://localhost:18080/cache/my-prompt
+```
+
+**Compute similarity:**
+```bash
+curl -X POST http://localhost:18080/similarity \
+  -H "Content-Type: application/json" \
+  -d '{"lhs":[1.0,0.0,0.5],"rhs":[0.8,0.2,0.4]}'
+```
+
+**Get telemetry:**
+```bash
+curl http://localhost:18080/telemetry
+```
+
+## Project Structure
+
+```
+hypercache-llm/
+├── include/hypercache/
+│   ├── cache/
+│   │   ├── lru_cache.hpp           # Thread-safe LRU template
+│   │   ├── lru_cache_backend.hpp   # LRU CacheBackend adapter
+│   │   ├── redis_cache.hpp         # Low-level Redis client
+│   │   ├── redis_cache_backend.hpp # Redis CacheBackend with pooling
+│   │   ├── redis_connection_pool.hpp # Connection pool
+│   │   └── cache_backend.hpp       # Abstract cache interface
+│   ├── similarity/
+│   │   └── similarity_engine.hpp   # Cosine similarity
+│   ├── telemetry/
+│   │   └── telemetry.hpp           # Token counters
+│   └── server/
+│       └── app.hpp                 # HTTP server
+├── src/
+│   ├── cache/                      # Cache implementations
+│   ├── similarity/                 # Similarity engine
+│   ├── telemetry/                  # Telemetry
+│   └── server/                     # Server main
+├── tests/
+│   ├── cache/                      # Cache tests
+│   └── similarity/                 # Similarity tests
+├── Dockerfile                      # Multi-stage build
+├── docker-compose.yml              # Dev stack
+├── .dockerignore
+├── CMakeLists.txt
+└── LICENSE
+```
+
+## Dependencies
+
+- **C++20** compiler (GCC 10+, Clang 12+, MSVC 19.28+)
+- **CMake** 3.20+
+- **cpp-httplib** (via FetchContent)
+- **hiredis** (via FetchContent, optional)
+- **nlohmann/json** (via FetchContent)
+- **GoogleTest** (for tests, via find_package)
 
 ## Status
 
-Early development. APIs and implementation details may change.
+Active development. APIs may change.
 
 ## License
 
-The community edition is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+Community edition: GNU AGPL v3.0. See [LICENSE](LICENSE).
 
-Commercial users who need closed-source integration, proprietary modifications, or commercial redistribution must obtain a separate commercial license from the copyright holder.
-
-Commercial licensing contact: mahashreyaa@gmail.com
+Commercial licensing: contact mahashreyaa@gmail.com
