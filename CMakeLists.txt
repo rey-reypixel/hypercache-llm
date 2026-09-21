@@ -29,6 +29,7 @@ find_package(Threads QUIET)
 
 add_library(hypercache_core
     src/cache/lru_cache.cpp
+    src/cache/lru_cache_backend.cpp
     src/similarity/similarity_engine.cpp
     src/telemetry/telemetry.cpp
 )
@@ -47,6 +48,7 @@ endif()
 if(HYPERCACHE_BUILD_REDIS)
     add_library(hypercache_redis
         src/cache/redis_cache.cpp
+        src/cache/redis_cache_backend.cpp
     )
     target_include_directories(hypercache_redis PUBLIC include ${hiredis_SOURCE_DIR})
     target_link_libraries(hypercache_redis PRIVATE hypercache_core hiredis::hiredis)
@@ -71,6 +73,7 @@ if(HYPERCACHE_BUILD_TESTS)
     if(GTest_FOUND)
         add_executable(hypercache_tests
             tests/cache/lru_cache_test.cpp
+            tests/cache/lru_cache_backend_test.cpp
             tests/similarity/similarity_engine_test.cpp
         )
         target_link_libraries(hypercache_tests PRIVATE hypercache_core GTest::gtest_main)
@@ -78,6 +81,7 @@ if(HYPERCACHE_BUILD_TESTS)
             target_link_libraries(hypercache_tests PRIVATE hypercache_redis)
             add_executable(hypercache_redis_tests
                 tests/cache/redis_cache_test.cpp
+                tests/cache/redis_cache_backend_test.cpp
             )
             target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
         endif()

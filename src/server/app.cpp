@@ -1,5 +1,5 @@
 #include "hypercache/server/app.hpp"
-#include "hypercache/cache/lru_cache.hpp"
+#include "hypercache/cache/lru_cache_backend.hpp"
 #include "hypercache/telemetry/telemetry.hpp"
 #include "hypercache/similarity/similarity_engine.hpp"
 
@@ -8,15 +8,15 @@
 #include <string>
 #include <sstream>
 #include <functional>
+#include <memory>
+
+#ifdef HYPERCACHE_BUILD_REDIS
+#include "hypercache/cache/redis_cache_backend.hpp"
+#endif
 
 namespace hypercache::server {
 
 namespace {
-
-auto& get_cache() {
-    static hypercache::cache::LruCache<std::string, std::string> cache(128);
-    return cache;
-}
 
 auto& get_telemetry() {
     return hypercache::telemetry::TokenTelemetry::instance();
@@ -59,7 +59,27 @@ std::vector<float> parse_float_array(const std::string& json_str, const std::str
 
 } // namespace
 
-App::App(unsigned short port) : port_(port), running_(false) {}
+App::App(unsigned short port, CacheConfig cache_config)
+    : port_(port), cache_config_(std::move(cache_config)), running_(false) {
+
+    switch (cache_config_.type) {
+        case CacheBackendType::LRU:
+            cache_ = std::make_unique<hypercache::cache::LruCacheBackend>(cache_config_.lru_capacity);
+            break;
+        case CacheBackendType::Redis:
+#ifdef HYPERCACHE_BUILD_REDIS
+            cache_ = std::make_unique<hypercache::cache::RedisCacheBackend>(
+                cache_config_.redis_host, cache_config_.redis_port);
+            if (!cache_->connect()) {
+                throw std::runtime_error("Failed to connect to Redis at " +
+                    cache_config_.redis_host + ":" + std::to_string(cache_config_.redis_port));
+            }
+#else
+            throw std::runtime_error("Redis backend not available: rebuild with -DHYPERCACHE_BUILD_REDIS=ON");
+#endif
+            break;
+    }
+}
 
 App::~App() { stop(); }
 
@@ -72,8 +92,7 @@ void App::run() {
     });
 
     svr.Get("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        auto& cache = get_cache();
-        auto result = cache.get(req.matches[1]);
+        auto result = cache_->get(req.matches[1]);
         get_telemetry().record_request(1);
         if (result.has_value()) {
             res.set_content(result.value(), "text/plain");
@@ -84,14 +103,13 @@ void App::run() {
     });
 
     svr.Put("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        auto& cache = get_cache();
-        cache.put(req.matches[1], req.body);
+        cache_->put(req.matches[1], req.body);
         get_telemetry().record_request(1);
         res.set_content("Cached", "text/plain");
     });
 
-    svr.Delete("/cache/:key", [&](const httplib::Request&, httplib::Response& res) {
-        auto& cache = get_cache();
+    svr.Delete("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
+        cache_->remove(req.matches[1]);
         get_telemetry().record_request(1);
         res.set_content("Removed", "text/plain");
     });
@@ -99,7 +117,7 @@ void App::run() {
     svr.Get("/cache", [&](const httplib::Request&, httplib::Response& res) {
         get_telemetry().record_request(1);
         std::ostringstream oss;
-        oss << "{\"size\":" << get_cache().size() << "}";
+        oss << "{\"size\":" << cache_->size() << "}";
         res.set_content(oss.str(), "application/json");
     });
 
@@ -152,8 +170,46 @@ void App::stop() {
 
 } // namespace hypercache::server
 
-int main() {
-    hypercache::server::App app(18080);
-    app.run();
+int main(int argc, char* argv[]) {
+    unsigned short port = 18080;
+    hypercache::server::CacheConfig cache_config;
+
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--port" && i + 1 < argc) {
+            port = static_cast<unsigned short>(std::stoi(argv[++i]));
+        } else if (arg == "--cache" && i + 1 < argc) {
+            std::string cache_type = argv[++i];
+            if (cache_type == "redis") {
+                cache_config.type = hypercache::server::CacheBackendType::Redis;
+            } else if (cache_type == "lru") {
+                cache_config.type = hypercache::server::CacheBackendType::LRU;
+            }
+        } else if (arg == "--redis-host" && i + 1 < argc) {
+            cache_config.redis_host = argv[++i];
+        } else if (arg == "--redis-port" && i + 1 < argc) {
+            cache_config.redis_port = std::stoi(argv[++i]);
+        } else if (arg == "--lru-capacity" && i + 1 < argc) {
+            cache_config.lru_capacity = std::stoull(argv[++i]);
+        } else if (arg == "--help") {
+            std::cout << "Usage: hypercache_server [options]\n"
+                      << "Options:\n"
+                      << "  --port PORT           Server port (default: 18080)\n"
+                      << "  --cache TYPE          Cache backend: lru|redis (default: lru)\n"
+                      << "  --redis-host HOST     Redis host (default: 127.0.0.1)\n"
+                      << "  --redis-port PORT     Redis port (default: 6379)\n"
+                      << "  --lru-capacity SIZE   LRU cache capacity (default: 128)\n"
+                      << "  --help                Show this help\n";
+            return 0;
+        }
+    }
+
+    try {
+        hypercache::server::App app(port, cache_config);
+        app.run();
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
     return 0;
 }
