@@ -20,10 +20,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup CMake 3.28
+      - name: Setup CMake 3.x
         uses: jwlawson/actions-setup-cmake@v2
         with:
-          cmake-version: '3.28.3'
+          cmake-version: '3.31.6'
 
       - name: Install dependencies
         run: |
