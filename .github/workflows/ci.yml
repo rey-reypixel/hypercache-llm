@@ -43,7 +43,7 @@ jobs:
           redis-cli ping
 
       - name: Configure CMake
-        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/policy.cmake ${{ env.CMAKE_OPTIONS }}
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
@@ -78,7 +78,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"lhs":[1.0,0.0],"rhs":[1.0,0.0]}'
 
-  build-asan:
+build-asan:
     runs-on: ubuntu-latest
     name: AddressSanitizer
 
@@ -86,11 +86,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install CMake 3.28
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget -q https://cmake.org/files/v3.28/cmake-3.28.6-linux-x86_64.tar.gz
+          tar -xzf cmake-3.28.6-linux-x86_64.tar.gz
+          sudo cp -r cmake-3.28.6-linux-x86_64/* /usr/local/
+          rm -rf cmake-3.28.6-linux-x86_64*
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake \
             g++ \
             libssl-dev \
             redis-server
@@ -137,11 +145,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install CMake 3.28
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget -q https://cmake.org/files/v3.28/cmake-3.28.6-linux-x86_64.tar.gz
+          tar -xzf cmake-3.28.6-linux-x86_64.tar.gz
+          sudo cp -r cmake-3.28.6-linux-x86_64/* /usr/local/
+          rm -rf cmake-3.28.6-linux-x86_64*
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake \
             g++ \
             libssl-dev \
             redis-server \
@@ -189,11 +205,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install CMake 3.28
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget -q https://cmake.org/files/v3.28/cmake-3.28.6-linux-x86_64.tar.gz
+          tar -xzf cmake-3.28.6-linux-x86_64.tar.gz
+          sudo cp -r cmake-3.28.6-linux-x86_64/* /usr/local/
+          rm -rf cmake-3.28.6-linux-x86_64*
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake \
             g++ \
             libssl-dev \
             redis-server
@@ -237,11 +261,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install CMake 3.28
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget -q https://cmake.org/files/v3.28/cmake-3.28.6-linux-x86_64.tar.gz
+          tar -xzf cmake-3.28.6-linux-x86_64.tar.gz
+          sudo cp -r cmake-3.28.6-linux-x86_64/* /usr/local/
+          rm -rf cmake-3.28.6-linux-x86_64*
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake \
             g++ \
             libssl-dev \
             redis-server
@@ -276,9 +308,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install CMake 3.28
+        run: choco install cmake --version=3.28.6 --installargs 'ADD_CMAKE_TO_PATH=System' -y
+
       - name: Install dependencies
         run: |
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
           choco install redis-64 -y
 
       - name: Start Redis
