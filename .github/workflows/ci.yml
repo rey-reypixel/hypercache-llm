@@ -270,9 +270,9 @@ jobs:
           choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
           choco install redis-64 -y
 
-- name: Start Redis
+      - name: Start Redis
         run: |
-          sudo systemctl start redis-server
+          Start-Service redis
           redis-cli ping
 
       - name: Configure CMake
