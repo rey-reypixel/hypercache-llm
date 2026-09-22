@@ -78,7 +78,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"lhs":[1.0,0.0],"rhs":[1.0,0.0]}'
 
-build-asan:
+  build-asan:
     runs-on: ubuntu-latest
     name: AddressSanitizer
 
@@ -136,7 +136,6 @@ build-asan:
           curl -f http://localhost:18081/health
           curl -f -X PUT http://localhost:18081/cache/test -d "value"
           curl -f http://localhost:18081/cache/test
-  # End of ASan job
 
   build-valgrind:
     runs-on: ubuntu-latest
