@@ -24,15 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            lsb-release \
-            wget \
-            gnupg \
-            software-properties-common
-          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
-          sudo apt-add-repository "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            cmake=3.28.* \
+            cmake \
             g++ \
             libssl-dev \
             redis-server
