@@ -20,12 +20,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install CMake 3.28.6
+      - name: Install CMake 3.28
         run: |
-          wget -q https://github.com/Kitware/CMake/releases/download/v3.28.6/cmake-3.28.6-linux-x86_64.sh
-          chmod +x cmake-3.28.6-linux-x86_64.sh
-          sudo ./cmake-3.28.6-linux-x86_64.sh --skip-license --prefix=/usr/local
-          rm cmake-3.28.6-linux-x86_64.sh
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget -q https://cmake.org/files/v3.28/cmake-3.28.6-linux-x86_64.tar.gz
+          tar -xzf cmake-3.28.6-linux-x86_64.tar.gz
+          sudo cp -r cmake-3.28.6-linux-x86_64/* /usr/local/
+          rm -rf cmake-3.28.6-linux-x86_64*
 
       - name: Install dependencies
         run: |
