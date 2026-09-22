@@ -29,9 +29,9 @@ jobs:
             libssl-dev \
             redis-server
 
-- name: Start Redis
+      - name: Start Redis
         run: |
-          Start-Service redis
+          sudo systemctl start redis-server
           redis-cli ping
 
       - name: Configure CMake
