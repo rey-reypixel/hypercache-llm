@@ -136,6 +136,7 @@ build-asan:
           curl -f http://localhost:18081/health
           curl -f -X PUT http://localhost:18081/cache/test -d "value"
           curl -f http://localhost:18081/cache/test
+  # End of ASan job
 
   build-valgrind:
     runs-on: ubuntu-latest
