@@ -102,7 +102,8 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address" \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/policy.cmake
 
       - name: Build (ASan)
         run: cmake --build build-asan --config Debug -j$(nproc)
@@ -151,7 +152,8 @@ jobs:
             -DHYPERCACHE_BUILD_TESTS=ON \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_FLAGS="-O0 -g" \
-            -DCMAKE_C_FLAGS="-O0 -g"
+            -DCMAKE_C_FLAGS="-O0 -g" \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/policy.cmake
 
       - name: Build (Valgrind)
         run: cmake --build build-valgrind --config Debug -j$(nproc)
@@ -203,7 +205,8 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread"
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread" \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/policy.cmake
 
       - name: Build (TSan)
         run: cmake --build build-tsan --config Debug -j$(nproc)
@@ -276,7 +279,7 @@ jobs:
           redis-cli ping
 
       - name: Configure CMake
-        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/policy.cmake ${{ env.CMAKE_OPTIONS }}
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j
