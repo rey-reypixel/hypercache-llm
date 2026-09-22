@@ -29,13 +29,13 @@ jobs:
             libssl-dev \
             redis-server
 
-      - name: Start Redis
+- name: Start Redis
         run: |
-          sudo systemctl start redis-server
+          Start-Service redis
           redis-cli ping
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ${{ env.CMAKE_OPTIONS }}
+        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
@@ -102,8 +102,7 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address" \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
 
       - name: Build (ASan)
         run: cmake --build build-asan --config Debug -j$(nproc)
@@ -152,8 +151,7 @@ jobs:
             -DHYPERCACHE_BUILD_TESTS=ON \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_FLAGS="-O0 -g" \
-            -DCMAKE_C_FLAGS="-O0 -g" \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            -DCMAKE_C_FLAGS="-O0 -g"
 
       - name: Build (Valgrind)
         run: cmake --build build-valgrind --config Debug -j$(nproc)
@@ -205,8 +203,7 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -O1 -g" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread" \
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread"
 
       - name: Build (TSan)
         run: cmake --build build-tsan --config Debug -j$(nproc)
@@ -244,7 +241,7 @@ jobs:
           redis-cli ping
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ${{ env.CMAKE_OPTIONS }}
+        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
 
       - name: Build
         run: cmake --build build --config Release -j$(nproc)
@@ -273,13 +270,13 @@ jobs:
           choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
           choco install redis-64 -y
 
-      - name: Start Redis
+- name: Start Redis
         run: |
-          Start-Service redis
+          sudo systemctl start redis-server
           redis-cli ping
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ${{ env.CMAKE_OPTIONS }}
+        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j
