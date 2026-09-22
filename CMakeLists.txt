@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
+
+# CMake 4.x compatibility for fetched dependencies with old CMake versions
+cmake_policy(VERSION 3.5...4.0)
+
 project(HyperCacheLLM VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
