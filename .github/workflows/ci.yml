@@ -20,11 +20,15 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Setup CMake 3.28
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.28.3'
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake \
             g++ \
             libssl-dev \
             redis-server
