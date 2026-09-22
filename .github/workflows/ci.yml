@@ -171,6 +171,93 @@ jobs:
           curl -f -X PUT http://localhost:18081/cache/test -d "value"
           curl -f http://localhost:18081/cache/test
 
+  build-tsan:
+    runs-on: ubuntu-latest
+    name: ThreadSanitizer
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libssl-dev \
+            redis-server
+
+      - name: Start Redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
+
+      - name: Configure CMake (TSan)
+        run: |
+          cmake -B build-tsan \
+            -DHYPERCACHE_BUILD_SERVER=ON \
+            -DHYPERCACHE_BUILD_REDIS=ON \
+            -DHYPERCACHE_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -O1 -g" \
+            -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -O1 -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=thread"
+
+      - name: Build (TSan)
+        run: cmake --build build-tsan --config Debug -j$(nproc)
+
+      - name: Run concurrent tests (TSan)
+        run: |
+          cd build-tsan
+          TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1 ctest --output-on-failure -R "Concurrent" -j$(nproc)
+
+      - name: Run stress tests (TSan)
+        run: |
+          cd build-tsan
+          TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1 ctest --output-on-failure -R "Stress" -j$(nproc)
+
+  build-benchmarks:
+    runs-on: ubuntu-latest
+    name: Benchmarks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libssl-dev \
+            redis-server
+
+      - name: Start Redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
+
+      - name: Configure CMake
+        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
+
+      - name: Build
+        run: cmake --build build --config Release -j$(nproc)
+
+      - name: Run benchmarks
+        run: |
+          cd build
+          ./hypercache_benchmarks --benchmark_format=json --benchmark_out=benchmark_results.json --benchmark_out_format=json 2>&1 | tail -100
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: build/benchmark_results.json
+          retention-days: 30
+
   build-windows:
     runs-on: windows-latest
 
@@ -201,7 +288,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    needs: [build-and-test, build-asan, build-valgrind]
+    needs: [build-and-test, build-asan, build-valgrind, build-tsan, build-benchmarks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:

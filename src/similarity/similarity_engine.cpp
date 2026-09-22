@@ -39,9 +39,18 @@ float SimilarityEngine::cosine_similarity_sse(std::span<const float> lhs,
         rhs_norm_vec = _mm_fmadd_ps(b, b, rhs_norm_vec);
     }
 
-    float dot = _mm_cvtss_f32(_mm_dp_ps(dot_vec, dot_vec, 0xF1));
-    float lhs_norm = _mm_cvtss_f32(_mm_dp_ps(lhs_norm_vec, lhs_norm_vec, 0xF1));
-    float rhs_norm = _mm_cvtss_f32(_mm_dp_ps(rhs_norm_vec, rhs_norm_vec, 0xF1));
+    // Horizontal sum using hadd (same pattern as AVX2)
+    __m128 dot_sum = _mm_hadd_ps(dot_vec, dot_vec);
+    dot_sum = _mm_hadd_ps(dot_sum, dot_sum);
+    float dot = _mm_cvtss_f32(dot_sum);
+
+    __m128 lhs_sum = _mm_hadd_ps(lhs_norm_vec, lhs_norm_vec);
+    lhs_sum = _mm_hadd_ps(lhs_sum, lhs_sum);
+    float lhs_norm = _mm_cvtss_f32(lhs_sum);
+
+    __m128 rhs_sum = _mm_hadd_ps(rhs_norm_vec, rhs_norm_vec);
+    rhs_sum = _mm_hadd_ps(rhs_sum, rhs_sum);
+    float rhs_norm = _mm_cvtss_f32(rhs_sum);
 
     for (std::size_t i = vec_count * vec_size; i < n; ++i) {
         dot += lhs[i] * rhs[i];

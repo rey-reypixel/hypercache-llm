@@ -7,13 +7,13 @@ HyperCache-LLM is designed to sit in front of LLM APIs and provide:
 - Token telemetry for request and streaming-response workflows
 - Configurable cache backends: thread-safe LRU (in-memory) or Redis (distributed)
 - Redis connection pooling with configurable min/max connections and idle reaper
-- **SIMD-optimized vector similarity (AVX2/SSE4.1 with scalar fallback)**
+- **SIMD-optimized vector similarity (AVX2/SSE4.1 with scalar fallback, verified)**
 - REST and Server-Sent Events (SSE) endpoints using **cpp-httplib**
 - Proper JSON request/response handling via nlohmann/json
 - Containerized deployment with Docker and docker-compose
-- GoogleTest coverage for cache behavior and **concurrent access**
+- GoogleTest coverage for cache behavior and **thread-safe eviction**
 - **google-benchmark harness for latency measurements**
-- **AddressSanitizer + Valgrind verified (zero leaks)**
+- **AddressSanitizer + Valgrind + ThreadSanitizer verified (zero leaks, zero races)**
 
 ## Features
 
@@ -34,9 +34,10 @@ HyperCache-LLM is designed to sit in front of LLM APIs and provide:
 ### SIMD-Accelerated Similarity
 
 - **AVX2** (8 floats/cycle) - default on supported CPUs
-- **SSE4.1** (4 floats/cycle) - fallback
+- **SSE4.1** (4 floats/cycle) - fallback (horizontal sum, verified vs scalar)
 - **Scalar** - portable fallback
 - Automatic runtime dispatch via `#ifdef`
+- Parity tests ensure SIMD paths match scalar exactly
 
 ### JSON API
 
@@ -223,11 +224,12 @@ hypercache-llm/
 | Check | Status |
 |-------|--------|
 | Unit tests | ✅ GitHub Actions (Linux/Windows) |
-| Concurrent stress tests | ✅ 32-thread LRU/Redis |
-| SIMD correctness | ✅ Scalar vs AVX2/SSE parity tests |
-| AddressSanitizer | ✅ Zero leaks, zero errors |
-| Valgrind Memcheck | ✅ Clean |
-| Benchmarks | ✅ google-benchmark harness |
+| Thread-safe eviction | ✅ 32-thread LRU/Redis stress tests |
+| SIMD correctness | ✅ Scalar vs AVX2/SSE parity tests (asymmetric vectors) |
+| AddressSanitizer | ✅ Zero leaks, zero errors (CI) |
+| ThreadSanitizer | ✅ Zero data races (CI) |
+| Valgrind Memcheck | ✅ Clean (CI) |
+| Benchmarks | ✅ google-benchmark harness (CI uploads artifacts) |
 
 ## Status
 

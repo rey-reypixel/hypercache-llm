@@ -45,8 +45,11 @@ TEST(SimilarityEngine, ScalarMatchesAVX2) {
 }
 
 TEST(SimilarityEngine, ScalarMatchesSSE) {
-    const std::vector<float> lhs(256, 0.7F);
-    const std::vector<float> rhs(256, 0.2F);
+    std::vector<float> lhs(256), rhs(256);
+    for (std::size_t i = 0; i < 256; ++i) {
+        lhs[i] = static_cast<float>(i) * 0.01F + 0.1F;
+        rhs[i] = static_cast<float>(255 - i) * 0.01F + 0.2F;
+    }
     float scalar = hypercache::similarity::SimilarityEngine::cosine_similarity_scalar(lhs, rhs);
 #if defined(__SSE4_1__) || defined(_M_SSE4_1)
     float sse = hypercache::similarity::SimilarityEngine::cosine_similarity_sse(lhs, rhs);

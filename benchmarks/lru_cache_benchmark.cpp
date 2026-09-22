@@ -108,3 +108,62 @@ static void BM_LruCacheConcurrent(benchmark::State& state) {
     }
 }
 BENCHMARK(BM_LruCacheConcurrent)->Arg(1)->Arg(2)->Arg(4)->Arg(8)->Arg(16)->Arg(32);
+
+static void BM_LruCacheHitVsMiss(benchmark::State& state) {
+    hypercache::cache::LruCacheBackend cache(10000);
+    const double hit_ratio = state.range(0) / 100.0;
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<double> hit_dist(0.0, 1.0);
+    std::uniform_int_distribution<int> key_dist(0, 9999);
+
+    for (int i = 0; i < 5000; ++i) {
+        cache.put("key_" + std::to_string(i), "value_" + std::to_string(i));
+    }
+
+    int64_t hits = 0, misses = 0;
+    for (auto _ : state) {
+        int key = key_dist(rng);
+        std::string key_str = "key_" + std::to_string(key);
+        if (hit_dist(rng) < hit_ratio) {
+            cache.get(key_str);
+            hits++;
+        } else {
+            cache.get("miss_" + std::to_string(key));
+            misses++;
+        }
+    }
+    state.counters["hit_ratio"] = benchmark::Counter(hits, benchmark::Counter::kIsRate);
+    state.counters["miss_ratio"] = benchmark::Counter(misses, benchmark::Counter::kIsRate);
+    state.SetItemsProcessed(state.iterations());
+}
+BENCHMARK(BM_LruCacheHitVsMiss)->Arg(99)->Arg(95)->Arg(90)->Arg(75)->Arg(50)->Arg(25)->Arg(1);
+
+static void BM_LruCacheColdPath(benchmark::State& state) {
+    hypercache::cache::LruCacheBackend cache(10000);
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<int> key_dist(0, 9999);
+
+    for (auto _ : state) {
+        int key = key_dist(rng);
+        cache.get("cold_" + std::to_string(key));
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+BENCHMARK(BM_LruCacheColdPath);
+
+static void BM_LruCacheHotPath(benchmark::State& state) {
+    hypercache::cache::LruCacheBackend cache(10000);
+    std::mt19937 rng(42);
+    std::uniform_int_distribution<int> key_dist(0, 9999);
+
+    for (int i = 0; i < 5000; ++i) {
+        cache.put("key_" + std::to_string(i), "value_" + std::to_string(i));
+    }
+
+    for (auto _ : state) {
+        int key = key_dist(rng);
+        cache.get("key_" + std::to_string(key));
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+BENCHMARK(BM_LruCacheHotPath);
