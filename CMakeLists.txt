@@ -1,12 +1,8 @@
-cmake_minimum_required(VERSION 3.20)
-
 # CMake 4.x compatibility for fetched dependencies with old CMake versions
-# Must be set before project() to affect FetchContent subdirectories
-set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+# Must be set before cmake_minimum_required() to affect FetchContent subdirectories
+# Using toolchain file approach instead
 
-project(HyperCacheLLM VERSION 0.1.0 LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
+cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
