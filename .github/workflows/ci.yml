@@ -8,7 +8,7 @@ on:
 
 env:
   BUILD_TYPE: Release
-  CMAKE_OPTIONS: -DHYPERCACHE_BUILD_SERVER=ON -DHYPERCACHE_BUILD_REDIS=ON -DHYPERCACHE_BUILD_TESTS=ON
+  CMAKE_OPTIONS: -DHYPERCACHE_BUILD_SERVER=ON -DHYPERCACHE_BUILD_REDIS=ON -DHYPERCACHE_BUILD_TESTS=ON -DHYPERCACHE_BUILD_BENCHMARKS=ON
 
 jobs:
   build-and-test:
@@ -70,6 +70,107 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"lhs":[1.0,0.0],"rhs":[1.0,0.0]}'
 
+  build-asan:
+    runs-on: ubuntu-latest
+    name: AddressSanitizer
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libssl-dev \
+            redis-server
+
+      - name: Start Redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
+
+      - name: Configure CMake (ASan)
+        run: |
+          cmake -B build-asan \
+            -DHYPERCACHE_BUILD_SERVER=ON \
+            -DHYPERCACHE_BUILD_REDIS=ON \
+            -DHYPERCACHE_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g" \
+            -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -O1 -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address"
+
+      - name: Build (ASan)
+        run: cmake --build build-asan --config Debug -j$(nproc)
+
+      - name: Run tests (ASan)
+        run: |
+          cd build-asan
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 ctest --output-on-failure -j$(nproc)
+
+      - name: Run server (ASan)
+        run: |
+          timeout 10 ./build-asan/hypercache_server --cache lru --port 18081 &
+          sleep 2
+          curl -f http://localhost:18081/health
+          curl -f -X PUT http://localhost:18081/cache/test -d "value"
+          curl -f http://localhost:18081/cache/test
+
+  build-valgrind:
+    runs-on: ubuntu-latest
+    name: Valgrind Memcheck
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            g++ \
+            libssl-dev \
+            redis-server \
+            valgrind
+
+      - name: Start Redis
+        run: |
+          sudo systemctl start redis-server
+          redis-cli ping
+
+      - name: Configure CMake (Valgrind)
+        run: |
+          cmake -B build-valgrind \
+            -DHYPERCACHE_BUILD_SERVER=ON \
+            -DHYPERCACHE_BUILD_REDIS=ON \
+            -DHYPERCACHE_BUILD_TESTS=ON \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-O0 -g" \
+            -DCMAKE_C_FLAGS="-O0 -g"
+
+      - name: Build (Valgrind)
+        run: cmake --build build-valgrind --config Debug -j$(nproc)
+
+      - name: Run unit tests (Valgrind)
+        run: |
+          cd build-valgrind
+          valgrind --tool=memcheck --leak-check=full --error-exitcode=1 --suppressions=../.github/valgrind.supp \
+            ./hypercache_tests 2>&1 | tail -50
+
+      - name: Run server (Valgrind)
+        run: |
+          valgrind --tool=memcheck --leak-check=full --error-exitcode=1 --suppressions=.github/valgrind.supp \
+            timeout 10 ./build-valgrind/hypercache_server --cache lru --port 18081 &
+          sleep 3
+          curl -f http://localhost:18081/health
+          curl -f -X PUT http://localhost:18081/cache/test -d "value"
+          curl -f http://localhost:18081/cache/test
+
   build-windows:
     runs-on: windows-latest
 
@@ -100,7 +201,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [build-and-test, build-asan, build-valgrind]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:

@@ -1,0 +1,31 @@
+{
+    <libstdc++>
+    Memcheck:Leak
+    ...
+    fun:std::*
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/libstdc++.so.*
+}
+{
+    <openssl>
+    Memcheck:Leak
+    ...
+    fun:CRYPTO_*
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/libcrypto.so.*
+}
+{
+    <hiredis>
+    Memcheck:Leak
+    ...
+    fun:redis*
+    ...
+    obj:/usr/lib/x86_64-linux-gnu/libhiredis.so.*
+}
+{
+    <cpp-httplib>
+    Memcheck:Leak
+    ...
+    fun:httplib::*
+    ...
+}

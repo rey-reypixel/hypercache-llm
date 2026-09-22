@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(HYPERCACHE_BUILD_TESTS "Build unit tests" ON)
 option(HYPERCACHE_BUILD_SERVER "Build HTTP server" ON)
 option(HYPERCACHE_BUILD_REDIS "Build Redis integration" ON)
+option(HYPERCACHE_BUILD_BENCHMARKS "Build benchmarks" ON)
 
 include(FetchContent)
 
@@ -32,6 +33,13 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+FetchContent_Declare(
+    benchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.8.3
+)
+FetchContent_MakeAvailable(benchmark)
+
 find_package(Threads QUIET)
 
 add_library(hypercache_core
@@ -47,10 +55,15 @@ if(Threads_FOUND)
 endif()
 
 if(MSVC)
-    target_compile_options(hypercache_core PRIVATE /W4 /permissive-)
+    target_compile_options(hypercache_core PRIVATE /W4 /permissive- /arch:AVX2)
 else()
-    target_compile_options(hypercache_core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(hypercache_core PRIVATE -Wall -Wextra -Wpedantic -mavx2 -msse4.1 -mfma)
 endif()
+
+# Compile similarity engine with SIMD flags
+set_target_properties(hypercache_core PROPERTIES
+    COMPILE_FLAGS "${CMAKE_CXX_FLAGS}"
+)
 
 if(HYPERCACHE_BUILD_REDIS)
     add_library(hypercache_redis
@@ -99,5 +112,23 @@ if(HYPERCACHE_BUILD_TESTS)
         gtest_discover_tests(hypercache_tests)
     else()
         message(STATUS "GTest not found; unit tests will not be built")
+    endif()
+endif()
+
+if(HYPERCACHE_BUILD_BENCHMARKS)
+    add_executable(hypercache_benchmarks
+        benchmarks/lru_cache_benchmark.cpp
+        benchmarks/similarity_benchmark.cpp
+        benchmarks/telemetry_benchmark.cpp
+    )
+    target_link_libraries(hypercache_benchmarks PRIVATE hypercache_core benchmark::benchmark)
+    if(HYPERCACHE_BUILD_REDIS)
+        target_link_libraries(hypercache_benchmarks PRIVATE hypercache_redis)
+    endif()
+    target_compile_features(hypercache_benchmarks PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(hypercache_benchmarks PRIVATE /W4 /permissive- /arch:AVX2)
+    else()
+        target_compile_options(hypercache_benchmarks PRIVATE -Wall -Wextra -Wpedantic -mavx2 -msse4.1 -mfma)
     endif()
 endif()
