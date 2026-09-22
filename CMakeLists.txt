@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
+
+# CMake 4.x compatibility for fetched dependencies with old CMake versions
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 project(HyperCacheLLM VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -20,13 +24,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(httplib)
 
 FetchContent_Declare(
-    hiredis
-    GIT_REPOSITORY https://github.com/redis/hiredis.git
-    GIT_TAG v1.2.0
-)
-FetchContent_MakeAvailable(hiredis)
-
-FetchContent_Declare(
     nlohmann_json
     GIT_REPOSITORY https://github.com/nlohmann/json.git
     GIT_TAG v3.11.2
@@ -39,6 +36,15 @@ FetchContent_Declare(
     GIT_TAG v1.8.3
 )
 FetchContent_MakeAvailable(benchmark)
+
+if(HYPERCACHE_BUILD_REDIS)
+    FetchContent_Declare(
+        hiredis
+        GIT_REPOSITORY https://github.com/redis/hiredis.git
+        GIT_TAG v1.2.0
+    )
+    FetchContent_MakeAvailable(hiredis)
+endif()
 
 find_package(Threads QUIET)
 
