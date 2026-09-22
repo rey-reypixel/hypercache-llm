@@ -20,11 +20,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup CMake 3.28.6
-        uses: lukka/run-cmake@v11
-        with:
-          cmakeVersion: '3.28.6'
-          cmakeOptions: '-DCMAKE_BUILD_TYPE=Release'
+      - name: Install CMake 3.28.6
+        run: |
+          wget -q https://github.com/Kitware/CMake/releases/download/v3.28.6/cmake-3.28.6-linux-x86_64.sh
+          chmod +x cmake-3.28.6-linux-x86_64.sh
+          sudo ./cmake-3.28.6-linux-x86_64.sh --skip-license --prefix=/usr/local
+          rm cmake-3.28.6-linux-x86_64.sh
 
       - name: Install dependencies
         run: |
