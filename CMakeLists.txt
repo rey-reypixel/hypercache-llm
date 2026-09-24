@@ -26,18 +26,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-FetchContent_Declare(
-    benchmark
-    GIT_REPOSITORY https://github.com/google/benchmark.git
-    GIT_TAG v1.9.1
-)
-FetchContent_MakeAvailable(benchmark)
+if(HYPERCACHE_BUILD_BENCHMARKS)
+    # Don't build benchmark's own tests; they try to download googletest at configure time.
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG v1.9.1
+    )
+    FetchContent_MakeAvailable(benchmark)
+endif()
 
 if(HYPERCACHE_BUILD_REDIS)
     FetchContent_Declare(
         hiredis
         GIT_REPOSITORY https://github.com/redis/hiredis.git
         GIT_TAG v1.2.0
+        # Checkout into a dir named "hiredis" so <hiredis/hiredis.h> resolves from its parent.
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/hiredis
     )
     FetchContent_MakeAvailable(hiredis)
 endif()
@@ -73,7 +80,7 @@ if(HYPERCACHE_BUILD_REDIS)
         src/cache/redis_cache_backend.cpp
         src/cache/redis_connection_pool.cpp
     )
-    target_include_directories(hypercache_redis PUBLIC include ${hiredis_SOURCE_DIR})
+    target_include_directories(hypercache_redis PUBLIC include ${CMAKE_BINARY_DIR}/_deps)
     target_link_libraries(hypercache_redis PRIVATE hypercache_core hiredis::hiredis)
     target_compile_features(hypercache_redis PRIVATE cxx_std_20)
 endif()
