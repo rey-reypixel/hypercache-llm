@@ -39,6 +39,15 @@ public:
         }
     }
 
+    bool erase(const Key& key) {
+        std::unique_lock lock(mutex_);
+        const auto found = entries_.find(key);
+        if (found == entries_.end()) return false;
+        order_.erase(found->second.order);
+        entries_.erase(found);
+        return true;
+    }
+
     std::size_t size() const {
         std::shared_lock lock(mutex_);
         return entries_.size();

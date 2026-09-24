@@ -13,7 +13,7 @@ void LruCacheBackend::put(std::string_view key, std::string_view value) {
 }
 
 void LruCacheBackend::remove(std::string_view key) {
-    cache_.put(std::string(key), std::string());
+    cache_.erase(std::string(key));
 }
 
 bool LruCacheBackend::exists(std::string_view key) {

@@ -114,7 +114,11 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 **Plan:** Call `sink.done()` after the last line.
 
 ### 22. LRU tests are failing
-- [ ] **Status:** open
+- [x] **Status:** fixed. `PutGetRemove` was #10. The two concurrent tests had wrong expectations, not a cache bug:
+  - `ConcurrentReadWrite` expected puts to be exactly half the ops, but it picks get or put with a random coin flip. Now it checks gets + puts == total ops (every get should hit, since nothing gets evicted there).
+  - `ConcurrentEvictionUnderLoad` expected every put-then-get to hit. With 16 threads fighting over 100 slots, another thread can evict your key in between. Now it checks some hits and that size stays at 100.
+
+  Ran all 24 tests 20x in a row, no flakes.
 
 **What's happening:** With Redis off, core + tests build, and 3 tests fail:
 - `LruCacheBackend.PutGetRemove`: that's bug #10 (remove doesn't remove).
@@ -142,7 +146,7 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 **Plan:** Small `entrypoint.sh` that builds the args from env vars and `exec`s the server. Or have the server read env vars itself as fallbacks. I'm leaning toward the second, since it's cleaner and works outside Docker too.
 
 ### 10. DELETE doesn't delete
-- [ ] **Status:** open
+- [x] **Status:** fixed. Added `LruCache::erase()`, and `remove()` now calls it. Added tests: remove clears `exists()`/`size()`, remove frees the slot (no extra eviction), and removing a missing key is a no-op
 
 **What's happening:** `LruCacheBackend::remove` just does `put(key, "")`. The key sticks around with an empty value, `exists()` still says true, and it still takes a slot.
 
@@ -238,4 +242,6 @@ Notes as I fix things. What worked, what didn't, anything weird.
 - Core library + unit tests (LRU, similarity, telemetry) do build with Redis off. 3 LRU tests fail.
 - Fixed #20 and #21. With Redis off, everything builds. Ran the server in the container and hit every endpoint: PUT/GET/404/size/similarity/telemetry all respond correctly. Benchmarks run too.
 - Found #23 while testing: `/stream` loops forever. Fixed with one line, `sink.done()`.
+- Fixed #10 + #22. With Redis off, everything builds and all tests pass. Checked PUT, then DELETE, then GET through the real server: returns 404 and size 0.
+- Next up: the big one, #19 (Redis doesn't compile).
 
