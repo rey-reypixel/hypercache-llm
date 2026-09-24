@@ -99,28 +99,33 @@ endif()
 
 if(HYPERCACHE_BUILD_TESTS)
     enable_testing()
-    find_package(GTest QUIET)
-    if(GTest_FOUND)
-        add_executable(hypercache_tests
-            tests/cache/lru_cache_test.cpp
-            tests/cache/lru_cache_backend_test.cpp
-            tests/similarity/similarity_engine_test.cpp
-            tests/telemetry/telemetry_test.cpp
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    include(GoogleTest)
+
+    add_executable(hypercache_tests
+        tests/cache/lru_cache_test.cpp
+        tests/cache/lru_cache_backend_test.cpp
+        tests/similarity/similarity_engine_test.cpp
+        tests/telemetry/telemetry_test.cpp
+    )
+    target_link_libraries(hypercache_tests PRIVATE hypercache_core GTest::gtest_main)
+    gtest_discover_tests(hypercache_tests)
+
+    if(HYPERCACHE_BUILD_REDIS)
+        add_executable(hypercache_redis_tests
+            tests/cache/redis_cache_test.cpp
+            tests/cache/redis_cache_backend_test.cpp
+            tests/cache/redis_connection_pool_test.cpp
         )
-        target_link_libraries(hypercache_tests PRIVATE hypercache_core GTest::gtest_main)
-        if(HYPERCACHE_BUILD_REDIS)
-            target_link_libraries(hypercache_tests PRIVATE hypercache_redis)
-            add_executable(hypercache_redis_tests
-                tests/cache/redis_cache_test.cpp
-                tests/cache/redis_cache_backend_test.cpp
-                tests/cache/redis_connection_pool_test.cpp
-            )
-            target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
-        endif()
-        include(GoogleTest)
-        gtest_discover_tests(hypercache_tests)
-    else()
-        message(STATUS "GTest not found; unit tests will not be built")
+        target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
+        gtest_discover_tests(hypercache_redis_tests)
     endif()
 endif()
 

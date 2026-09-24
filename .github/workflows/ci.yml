@@ -54,6 +54,12 @@ jobs:
           curl -f http://localhost:18081/cache/test
           curl -f http://localhost:18081/cache
           curl -f http://localhost:18081/telemetry
+          curl -f -X POST http://localhost:18081/similarity \
+            -H "Content-Type: application/json" \
+            -d '{"lhs":[1.0,0.0],"rhs":[1.0,0.0]}'
+          curl -f -X DELETE http://localhost:18081/cache/test
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18081/cache/test)" = "404"
+          curl -f --max-time 5 http://localhost:18081/stream
 
       - name: Test server startup (Redis)
         run: |
@@ -61,14 +67,8 @@ jobs:
           sleep 3
           curl -f http://localhost:18082/health
           curl -f -X PUT http://localhost:18082/cache/test -d "value"
-          curl -f http://localhost:18082/cache.test
+          curl -f http://localhost:18082/cache/test
           curl -f http://localhost:18082/cache
-
-      - name: Test similarity endpoint
-        run: |
-          curl -f -X POST http://localhost:18081/similarity \
-            -H "Content-Type: application/json" \
-            -d '{"lhs":[1.0,0.0],"rhs":[1.0,0.0]}'
 
   build-asan:
     runs-on: ubuntu-latest
@@ -118,7 +118,7 @@ jobs:
           sleep 2
           curl -f http://localhost:18081/health
           curl -f -X PUT http://localhost:18081/cache/test -d "value"
-          curl -f http://localhost:18081/cache.test
+          curl -f http://localhost:18081/cache/test
 
   build-valgrind:
     runs-on: ubuntu-latest
@@ -158,18 +158,19 @@ jobs:
 
       - name: Run unit tests (Valgrind)
         run: |
+          set -o pipefail
           cd build-valgrind
           valgrind --tool=memcheck --leak-check=full --error-exitcode=1 --suppressions=../.github/valgrind.supp \
             ./hypercache_tests 2>&1 | tail -50
 
       - name: Run server (Valgrind)
         run: |
-          valgrind --tool=memcheck --leak-check=full --error-exitcode=1 --suppressions=.github/valgrind.supp \
-            timeout 10 ./build-valgrind/hypercache_server --cache lru --port 18081 &
-          sleep 3
+          timeout 30 valgrind --tool=memcheck --leak-check=full --error-exitcode=1 --suppressions=.github/valgrind.supp \
+            ./build-valgrind/hypercache_server --cache lru --port 18081 &
+          sleep 8
           curl -f http://localhost:18081/health
           curl -f -X PUT http://localhost:18081/cache/test -d "value"
-          curl -f http://localhost:18081/cache.test
+          curl -f http://localhost:18081/cache/test
 
   build-tsan:
     runs-on: ubuntu-latest
