@@ -7,15 +7,40 @@
 
 namespace hypercache::cache {
 
+namespace {
+
+RedisConnectionPool::Config to_pool_config(const RedisCacheBackend::Config& config) {
+    RedisConnectionPool::Config pool_config;
+    pool_config.host = config.host;
+    pool_config.port = config.port;
+    pool_config.min_connections = config.pool_min;
+    pool_config.max_connections = config.pool_max;
+    pool_config.connect_timeout = config.connect_timeout;
+    pool_config.acquire_timeout = config.acquire_timeout;
+    return pool_config;
+}
+
+} // namespace
+
 struct RedisCacheBackend::Impl {
     RedisConnectionPool pool;
     bool connected = false;
 
-    explicit Impl(Config config) : pool(std::move(config)) {}
+    explicit Impl(const Config& config) : pool(to_pool_config(config)) {}
 };
 
+RedisCacheBackend::RedisCacheBackend() : RedisCacheBackend(Config{}) {}
+
 RedisCacheBackend::RedisCacheBackend(Config config)
-    : impl_(std::make_unique<Impl>(std::move(config))) {}
+    : impl_(std::make_unique<Impl>(config)) {}
+
+RedisCacheBackend::RedisCacheBackend(std::string host, int port)
+    : RedisCacheBackend([&] {
+          Config config;
+          config.host = std::move(host);
+          config.port = port;
+          return config;
+      }()) {}
 
 RedisCacheBackend::~RedisCacheBackend() = default;
 
@@ -41,7 +66,7 @@ void RedisCacheBackend::disconnect() {
 }
 
 bool RedisCacheBackend::is_connected() const noexcept {
-    return impl_->connected;
+    return impl_ && impl_->connected;
 }
 
 std::size_t RedisCacheBackend::pool_size() const noexcept {

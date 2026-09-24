@@ -1,5 +1,6 @@
 #include "hypercache/cache/redis_connection_pool.hpp"
 #include <gtest/gtest.h>
+#include <hiredis/hiredis.h>
 #include <thread>
 #include <vector>
 

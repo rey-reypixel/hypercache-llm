@@ -82,7 +82,18 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 **Fix:** Told FetchContent to check hiredis out into `_deps/hiredis`, and added `_deps` to the include path.
 
 ### 19. Redis code doesn't compile at all
-- [ ] **Status:** open
+- [x] **Status:** fixed. Everything builds with Redis ON, and all 12 Redis tests pass against a real redis-server (30 runs, no flakes)
+
+**What I changed:**
+- Forward-declared `redisContext` in the pool header.
+- Deleted the pool's move constructor/assignment. It was broken anyway: the reaper thread holds `this`, so moving the pool would leave the thread pointing at the old object.
+- Added `to_pool_config()` to map `RedisCacheBackend::Config` to `RedisConnectionPool::Config`.
+- Replaced the `Config config = {}` default arg with a separate no-arg constructor. Also added the `(host, port)` constructor the tests were already using.
+- The reaper used to `sleep_for(10s)`, so `stop()` could hang for 10 seconds. Now it waits on a condition variable and `stop()` wakes it up immediately.
+- If `start()` fails partway (Redis down), it now cleans up the connections it already made instead of leaking them.
+- `is_connected()` on a moved-from object used to dereference a null `impl_`. Now it's null-safe.
+- Linked hiredis PUBLIC so tests that call `redisCommand` directly can link. Added the missing `<memory>` and `<cstdarg>` includes, and dropped an unused `<hiredis/async.h>`.
+- `RedisCacheBackend.Size` failed on any Redis that already had `size_key` from an earlier run. The test now deletes the key first.
 
 **What's happening:** Pretty much all of `redis_connection_pool` and `redis_cache_backend`:
 - `redis_connection_pool.hpp` uses `redisContext` without including or forward-declaring it.
@@ -244,4 +255,6 @@ Notes as I fix things. What worked, what didn't, anything weird.
 - Found #23 while testing: `/stream` loops forever. Fixed with one line, `sink.done()`.
 - Fixed #10 + #22. With Redis off, everything builds and all tests pass. Checked PUT, then DELETE, then GET through the real server: returns 404 and size 0.
 - Next up: the big one, #19 (Redis doesn't compile).
+- Fixed #19. Bigger than the others, but it wasn't a rewrite, mostly the header and .cpp not agreeing with each other. Now the full build (server + Redis + tests + benchmarks) compiles clean on Ubuntu 24.04, and all 36 tests pass.
+- Heads-up: the Redis pool tests don't `GTEST_SKIP` when Redis isn't running, they just fail. Fine for CI since it starts Redis, but worth knowing locally.
 

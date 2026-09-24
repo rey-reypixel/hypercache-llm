@@ -81,7 +81,7 @@ if(HYPERCACHE_BUILD_REDIS)
         src/cache/redis_connection_pool.cpp
     )
     target_include_directories(hypercache_redis PUBLIC include ${CMAKE_BINARY_DIR}/_deps)
-    target_link_libraries(hypercache_redis PRIVATE hypercache_core hiredis::hiredis)
+    target_link_libraries(hypercache_redis PUBLIC hiredis::hiredis PRIVATE hypercache_core)
     target_compile_features(hypercache_redis PRIVATE cxx_std_20)
 endif()
 

@@ -34,6 +34,7 @@ TEST(RedisCacheBackend, Size) {
         GTEST_SKIP() << "Redis server not available at 127.0.0.1:6379";
     }
 
+    cache.remove("size_key");  // may be left over from a previous run
     auto size_before = cache.size();
     cache.put("size_key", "size_value");
     auto size_after = cache.size();

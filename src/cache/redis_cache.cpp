@@ -1,7 +1,7 @@
 #include "hypercache/cache/redis_cache.hpp"
 
 #include <hiredis/hiredis.h>
-#include <hiredis/async.h>
+#include <cstdarg>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -78,7 +78,7 @@ void RedisCache::disconnect() {
 }
 
 bool RedisCache::is_connected() const noexcept {
-    return impl_->is_connected();
+    return impl_ && impl_->is_connected();
 }
 
 std::optional<std::string> RedisCache::get(std::string_view key) {
