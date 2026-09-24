@@ -197,6 +197,7 @@ void App::run() {
                 get_telemetry().record_streaming(1);
                 sink.write(d2.data(), d2.size());
                 sink.write(d3.data(), d3.size());
+                sink.done();
                 return true;
             });
     });
