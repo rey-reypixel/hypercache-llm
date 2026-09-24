@@ -9,6 +9,7 @@
 #include <string>
 #include <sstream>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -101,7 +102,7 @@ void App::run() {
     });
 
     svr.Get("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        auto result = cache_->get(req.matches[1]);
+        auto result = cache_->get(req.path_params.at("key"));
         get_telemetry().record_request(1);
         if (result.has_value()) {
             get_telemetry().record_cache_hit();
@@ -116,7 +117,7 @@ void App::run() {
     });
 
     svr.Put("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        cache_->put(req.matches[1], req.body);
+        cache_->put(req.path_params.at("key"), req.body);
         get_telemetry().record_request(1);
         json j;
         j["status"] = "cached";
@@ -124,7 +125,7 @@ void App::run() {
     });
 
     svr.Delete("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        cache_->remove(req.matches[1]);
+        cache_->remove(req.path_params.at("key"));
         get_telemetry().record_request(1);
         json j;
         j["status"] = "removed";

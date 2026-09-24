@@ -93,18 +93,25 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 **Plan:** Go through the Redis files properly and make the header and .cpp agree. Map the backend Config to the pool Config. Once it builds, run the Redis tests against a real redis-server in the container.
 
 ### 20. Server doesn't compile: `req.matches[1]` isn't a string_view
-- [ ] **Status:** open
+- [x] **Status:** fixed. Switched to `req.path_params.at("key")`, and added the missing `<iostream>` too
 
 **What's happening:** Routes use `/cache/:key` (httplib's path-param style), but the handlers read `req.matches[1]`, which is for regex routes. It's a `sub_match` and doesn't convert to `string_view`. Even if it did compile, `matches` would be empty for `:key` routes.
 
 **Plan:** Use `req.path_params.at("key")`.
 
 ### 21. Benchmarks don't compile
+- [x] **Status:** fixed
+
+**What was happening:** `lru_cache_benchmark.cpp` used `std::thread` without `#include <thread>`. After fixing that, it failed to link with `undefined reference to 'main'`, because none of the benchmark files have `BENCHMARK_MAIN()`.
+
+**Fix:** Added the include and linked `benchmark::benchmark_main`.
+
+### 23. `/stream` never ends
 - [ ] **Status:** open
 
-**What's happening:** `lru_cache_benchmark.cpp` uses `std::thread` / `std::this_thread` without `#include <thread>`.
+**What's happening:** The chunked content provider writes its 3 lines and returns `true` but never calls `sink.done()`. httplib keeps calling it, so the stream repeats forever and curl just hangs there.
 
-**Plan:** Add the include, then see what else shows up.
+**Plan:** Call `sink.done()` after the last line.
 
 ### 22. LRU tests are failing
 - [ ] **Status:** open
@@ -229,4 +236,6 @@ Notes as I fix things. What worked, what didn't, anything weird.
 - I can't build locally (no compiler on my Windows box), so I'm testing in an `ubuntu:24.04` Docker container, which matches CI.
 - With configure fixed, the build shows the real state: Redis, server and benchmarks never compiled. Added those as #17–#22. Fixed #17 and #18 on the way.
 - Core library + unit tests (LRU, similarity, telemetry) do build with Redis off. 3 LRU tests fail.
+- Fixed #20 and #21. With Redis off, everything builds. Ran the server in the container and hit every endpoint: PUT/GET/404/size/similarity/telemetry all respond correctly. Benchmarks run too.
+- Found #23 while testing: `/stream` loops forever.
 

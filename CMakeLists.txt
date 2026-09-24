@@ -130,7 +130,7 @@ if(HYPERCACHE_BUILD_BENCHMARKS)
         benchmarks/similarity_benchmark.cpp
         benchmarks/telemetry_benchmark.cpp
     )
-    target_link_libraries(hypercache_benchmarks PRIVATE hypercache_core benchmark::benchmark)
+    target_link_libraries(hypercache_benchmarks PRIVATE hypercache_core benchmark::benchmark benchmark::benchmark_main)
     if(HYPERCACHE_BUILD_REDIS)
         target_link_libraries(hypercache_benchmarks PRIVATE hypercache_redis)
     endif()
