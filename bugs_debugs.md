@@ -24,35 +24,35 @@ That's coming from inside `benchmark-src/cmake/GoogleTest.cmake`. google-benchma
 - Only fetch benchmark at all when `HYPERCACHE_BUILD_BENCHMARKS` is ON. No reason to download it otherwise.
 
 ### 2. Unit tests never actually run in CI
-- [ ] **Status:** open
+- [x] **Status:** fixed. GoogleTest v1.15.2 now comes through FetchContent. Tested in a clean container with no system gtest, and all 37 tests ran
 
 **What's happening:** CI doesn't install GoogleTest, so `find_package(GTest QUIET)` quietly fails and CMake just prints "GTest not found; unit tests will not be built". CI then "passes" tests that don't exist.
 
 **Plan:** Pull GoogleTest in through FetchContent like the other deps, so it works the same everywhere (Linux, Windows, Docker, my machine) without anyone needing to install anything.
 
 ### 3. Redis tests aren't registered with ctest
-- [ ] **Status:** open
+- [x] **Status:** fixed
 
 **What's happening:** `hypercache_redis_tests` gets built but there's no `gtest_discover_tests` for it, so `ctest` never runs it.
 
 **Plan:** Add `gtest_discover_tests(hypercache_redis_tests)`.
 
 ### 4. Valgrind job can't fail
-- [ ] **Status:** open
+- [x] **Status:** fixed. Added `set -o pipefail`. Also found the Valgrind *server* step was running `valgrind timeout ./server`, so it was checking `timeout`, not our server. Flipped it to `timeout 30 valgrind ./server`
 
 **What's happening:** `valgrind ... ./hypercache_tests 2>&1 | tail -50`. The step's exit code comes from `tail`, not Valgrind, so leaks would never fail the build.
 
 **Plan:** Add `set -o pipefail` to the step (or drop the pipe).
 
 ### 5. Typo in the curl checks
-- [ ] **Status:** open
+- [x] **Status:** fixed. While I was in there: the separate "Test similarity endpoint" step ran after the LRU server's 10s timeout had probably already killed it, so I moved that check into the LRU step. Also added DELETE (expects 404 after) and `/stream` checks
 
 **What's happening:** Three places hit `/cache.test` instead of `/cache/test`. They'd 404 and fail the job once we actually get that far.
 
 **Plan:** Fix the paths.
 
 ### 6. Leftover `cmake/policy.cmake`
-- [ ] **Status:** open
+- [x] **Status:** fixed (deleted)
 
 **What's happening:** Leftover from the CMake-version rabbit hole. Nothing uses it anymore.
 
@@ -143,7 +143,7 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 ## Part 2 — Actual bugs in the code
 
 ### 8. `--cache redis` never works in the server
-- [ ] **Status:** open
+- [x] **Status:** fixed. Added the compile define. That exposed the Redis branch in `app.cpp` compiling for the first time and failing: it called `connect()` on the base `CacheBackend` pointer, which has no `connect()`. Now it connects on the concrete `RedisCacheBackend` first, then moves it into `cache_`. Checked end to end: PUT through the server shows up in `redis-cli`, DELETE removes it, and a bad Redis port exits with a clean error
 
 **What's happening:** `app.cpp` wraps all the Redis code in `#ifdef HYPERCACHE_BUILD_REDIS`, but that's only a CMake option. It never gets passed to the compiler as a define. So the Redis branch is always compiled out and the server always throws "Redis backend not available".
 
@@ -257,4 +257,5 @@ Notes as I fix things. What worked, what didn't, anything weird.
 - Next up: the big one, #19 (Redis doesn't compile).
 - Fixed #19. Bigger than the others, but it wasn't a rewrite, mostly the header and .cpp not agreeing with each other. Now the full build (server + Redis + tests + benchmarks) compiles clean on Ubuntu 24.04, and all 36 tests pass.
 - Heads-up: the Redis pool tests don't `GTEST_SKIP` when Redis isn't running, they just fail. Fine for CI since it starts Redis, but worth knowing locally.
+- Fixed CI items #2 to #6, plus #8. Ran the CI build-and-test job in a clean Ubuntu container: 37/37 tests pass, and both the LRU and Redis server checks pass. Haven't pushed yet, so real CI hasn't seen any of this. The ASan/TSan/Valgrind jobs will probably turn up new stuff the first time they actually run.
 

@@ -75,11 +75,12 @@ App::App(unsigned short port, CacheConfig cache_config)
                 redis_cfg.pool_max = cache_config_.redis_pool_max;
                 redis_cfg.connect_timeout = cache_config_.redis_connect_timeout;
                 redis_cfg.acquire_timeout = cache_config_.redis_acquire_timeout;
-                cache_ = std::make_unique<hypercache::cache::RedisCacheBackend>(std::move(redis_cfg));
-            }
-            if (!cache_->connect()) {
-                throw std::runtime_error("Failed to connect to Redis at " +
-                    cache_config_.redis_host + ":" + std::to_string(cache_config_.redis_port));
+                auto redis = std::make_unique<hypercache::cache::RedisCacheBackend>(std::move(redis_cfg));
+                if (!redis->connect()) {
+                    throw std::runtime_error("Failed to connect to Redis at " +
+                        cache_config_.redis_host + ":" + std::to_string(cache_config_.redis_port));
+                }
+                cache_ = std::move(redis);
             }
 #else
             throw std::runtime_error("Redis backend not available: rebuild with -DHYPERCACHE_BUILD_REDIS=ON");
