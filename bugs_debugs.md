@@ -59,7 +59,11 @@ That's coming from inside `benchmark-src/cmake/GoogleTest.cmake`. google-benchma
 **Plan:** Delete it.
 
 ### 7. Windows job is probably going to break
-- [ ] **Status:** open
+- [ ] **Status:** confirmed broken on PR #1. Fix drafted but not committed
+
+**What actually happened:** It died at "Start Redis" with `Cannot find any service with service name 'redis'`. The Chocolatey `redis-64` package doesn't set up a Windows service.
+
+**Drafted fix (uncommitted):** Dropped the Redis install/start steps from the Windows job and build with `HYPERCACHE_BUILD_REDIS=OFF`. Windows then only covers LRU, similarity and telemetry. Haven't seen whether MSVC compiles the rest of the code yet.
 
 **What's happening:** hiredis on MSVC plus the Chocolatey Redis package is untested. The Redis tests also need a live server.
 
@@ -138,6 +142,27 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 
 **Plan:** Fix #10 first, then look at the concurrent ones with `--output-on-failure`. They might be expecting something about remove too.
 
+### 24. Docker image never built
+- [ ] **Status:** fixed locally, not committed
+
+**What's happening:** The runtime stage does `useradd -r -u 1000 ...`, but Ubuntu 24.04 already ships a user called `ubuntu` with UID 1000. So `useradd` exits with code 4 and the whole image build fails. Nobody noticed because CI only builds Docker on `main` after everything else passes, and it never did.
+
+**Fix:** Dropped the hard-coded `-u 1000`. `docker build` finishes now.
+
+### 25. AddressSanitizer job fails on hiredis's own tests
+- [ ] **Status:** fix drafted, not committed
+
+**What's happening:** Our 37 tests all passed under ASan. What failed was `hiredis-test`, hiredis's own test suite, which FetchContent pulled into our ctest run. ASan flagged a `global-buffer-overflow` in *their* test code, not ours.
+
+**Drafted fix:** `set(DISABLE_TESTS ON ...)` before fetching hiredis, so their tests don't get registered with our ctest.
+
+### 26. `RedisCacheBackend.Size` is flaky in CI
+- [ ] **Status:** fix drafted, not committed
+
+**What's happening:** CI runs `ctest -j$(nproc)`, so several Redis tests run at the same time against the same Redis server. One test's DELETE can land between `Size`'s "before" and "after" reads, so the count doesn't go up. It passed locally because I ran the test binary directly (sequential), not through `ctest -j`.
+
+**Drafted fix:** `gtest_discover_tests(hypercache_redis_tests PROPERTIES RESOURCE_LOCK redis)`, so ctest never runs two Redis tests at once.
+
 ---
 
 ## Part 2 — Actual bugs in the code
@@ -150,7 +175,9 @@ Once configure worked, I did a full build in the Ubuntu container, and turns out
 **Plan:** `target_compile_definitions(hypercache_server PRIVATE HYPERCACHE_BUILD_REDIS)` when Redis is ON.
 
 ### 9. Docker ignores all the env vars
-- [ ] **Status:** open
+- [ ] **Status:** in progress, not committed
+
+**Done so far:** The server now reads `CACHE_TYPE`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_POOL_MIN` and `REDIS_POOL_MAX` as defaults, and CLI flags still override them. Removed the broken `CMD` from the Dockerfile. The image builds now (see #24). **Still to do:** actually run the container with and without `CACHE_TYPE=redis` and confirm it picks the right backend.
 
 **What's happening:** The Dockerfile's `CMD` is in exec form (`["--cache", "${CACHE_TYPE}", ...]`). Exec form doesn't expand variables, so the server literally gets the string `${CACHE_TYPE}`. `CACHE_TYPE=redis` does nothing.
 
@@ -259,3 +286,18 @@ Notes as I fix things. What worked, what didn't, anything weird.
 - Heads-up: the Redis pool tests don't `GTEST_SKIP` when Redis isn't running, they just fail. Fine for CI since it starts Redis, but worth knowing locally.
 - Fixed CI items #2 to #6, plus #8. Ran the CI build-and-test job in a clean Ubuntu container: 37/37 tests pass, and both the LRU and Redis server checks pass. Haven't pushed yet, so real CI hasn't seen any of this. The ASan/TSan/Valgrind jobs will probably turn up new stuff the first time they actually run.
 
+**2026-09-26**
+- Pushed everything to branch `fix/build-and-ci` and opened PR #1. First CI run that actually got past configure.
+- Results: **TSan, Valgrind and Benchmarks passed.** Three jobs failed: build-and-test (#26), AddressSanitizer (#25) and Windows (#7). None of them were bugs in the main code. They were a flaky test setup, hiredis's own tests, and Redis not existing on the Windows runner.
+- Started #9 and hit #24 on the way (the Docker image had literally never built).
+- Paused here. Fixes for #7, #9, #24, #25 and #26 are sitting in the working tree, **uncommitted and not verified in CI**. PR #1 still has the 3 red checks.
+
+## Where I left off
+
+- Branch: `fix/build-and-ci`, PR #1 open, 7 commits pushed.
+- Uncommitted: `CMakeLists.txt` + `ci.yml` (#7, #25, #26), `app.cpp` + `Dockerfile` (#9, #24).
+- To pick back up:
+  1. Run `ctest -j` locally with Redis and confirm #25/#26 are fixed.
+  2. Run the Docker image with and without `CACHE_TYPE=redis` to finish #9.
+  3. Commit, push, and see if CI goes fully green.
+- Also: Auto-fix is still switched on for PR #1 in the app. Turn it off if I don't want fixes auto-pushed.
