@@ -2,6 +2,7 @@
 #include <benchmark/benchmark.h>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 static void BM_LruCachePut(benchmark::State& state) {

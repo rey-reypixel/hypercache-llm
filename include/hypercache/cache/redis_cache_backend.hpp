@@ -20,7 +20,9 @@ public:
         std::chrono::milliseconds acquire_timeout = std::chrono::seconds(2);
     };
 
-    explicit RedisCacheBackend(Config config = {});
+    RedisCacheBackend();
+    explicit RedisCacheBackend(Config config);
+    RedisCacheBackend(std::string host, int port);
     ~RedisCacheBackend();
 
     RedisCacheBackend(const RedisCacheBackend&) = delete;

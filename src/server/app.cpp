@@ -6,9 +6,11 @@
 #include "httplib.h"
 #include "nlohmann/json.hpp"
 
+#include <cstdlib>
 #include <string>
 #include <sstream>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -74,11 +76,12 @@ App::App(unsigned short port, CacheConfig cache_config)
                 redis_cfg.pool_max = cache_config_.redis_pool_max;
                 redis_cfg.connect_timeout = cache_config_.redis_connect_timeout;
                 redis_cfg.acquire_timeout = cache_config_.redis_acquire_timeout;
-                cache_ = std::make_unique<hypercache::cache::RedisCacheBackend>(std::move(redis_cfg));
-            }
-            if (!cache_->connect()) {
-                throw std::runtime_error("Failed to connect to Redis at " +
-                    cache_config_.redis_host + ":" + std::to_string(cache_config_.redis_port));
+                auto redis = std::make_unique<hypercache::cache::RedisCacheBackend>(std::move(redis_cfg));
+                if (!redis->connect()) {
+                    throw std::runtime_error("Failed to connect to Redis at " +
+                        cache_config_.redis_host + ":" + std::to_string(cache_config_.redis_port));
+                }
+                cache_ = std::move(redis);
             }
 #else
             throw std::runtime_error("Redis backend not available: rebuild with -DHYPERCACHE_BUILD_REDIS=ON");
@@ -101,7 +104,7 @@ void App::run() {
     });
 
     svr.Get("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        auto result = cache_->get(req.matches[1]);
+        auto result = cache_->get(req.path_params.at("key"));
         get_telemetry().record_request(1);
         if (result.has_value()) {
             get_telemetry().record_cache_hit();
@@ -116,7 +119,7 @@ void App::run() {
     });
 
     svr.Put("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        cache_->put(req.matches[1], req.body);
+        cache_->put(req.path_params.at("key"), req.body);
         get_telemetry().record_request(1);
         json j;
         j["status"] = "cached";
@@ -124,7 +127,7 @@ void App::run() {
     });
 
     svr.Delete("/cache/:key", [&](const httplib::Request& req, httplib::Response& res) {
-        cache_->remove(req.matches[1]);
+        cache_->remove(req.path_params.at("key"));
         get_telemetry().record_request(1);
         json j;
         j["status"] = "removed";
@@ -196,6 +199,7 @@ void App::run() {
                 get_telemetry().record_streaming(1);
                 sink.write(d2.data(), d2.size());
                 sink.write(d3.data(), d3.size());
+                sink.done();
                 return true;
             });
     });
@@ -209,9 +213,30 @@ void App::stop() {
 
 } // namespace hypercache::server
 
+namespace {
+
+// Env vars set the defaults (used by Docker); CLI flags override them.
+void apply_env(hypercache::server::CacheConfig& cache_config) {
+    if (const char* v = std::getenv("CACHE_TYPE")) {
+        std::string cache_type = v;
+        if (cache_type == "redis") {
+            cache_config.type = hypercache::server::CacheBackendType::Redis;
+        } else if (cache_type == "lru") {
+            cache_config.type = hypercache::server::CacheBackendType::LRU;
+        }
+    }
+    if (const char* v = std::getenv("REDIS_HOST")) cache_config.redis_host = v;
+    if (const char* v = std::getenv("REDIS_PORT")) cache_config.redis_port = std::stoi(v);
+    if (const char* v = std::getenv("REDIS_POOL_MIN")) cache_config.redis_pool_min = std::stoull(v);
+    if (const char* v = std::getenv("REDIS_POOL_MAX")) cache_config.redis_pool_max = std::stoull(v);
+}
+
+} // namespace
+
 int main(int argc, char* argv[]) {
     unsigned short port = 18080;
     hypercache::server::CacheConfig cache_config;
+    apply_env(cache_config);
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

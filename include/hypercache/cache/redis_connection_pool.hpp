@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+struct redisContext;
+
 namespace hypercache::cache {
 
 class RedisConnectionPool {
@@ -30,8 +32,9 @@ public:
 
     RedisConnectionPool(const RedisConnectionPool&) = delete;
     RedisConnectionPool& operator=(const RedisConnectionPool&) = delete;
-    RedisConnectionPool(RedisConnectionPool&&) noexcept;
-    RedisConnectionPool& operator=(RedisConnectionPool&&) noexcept;
+    // Not movable: the reaper thread holds `this`.
+    RedisConnectionPool(RedisConnectionPool&&) = delete;
+    RedisConnectionPool& operator=(RedisConnectionPool&&) = delete;
 
     void start();
     void stop();
@@ -70,6 +73,7 @@ private:
     Config config_;
     mutable std::mutex mutex_;
     std::condition_variable cv_;
+    std::condition_variable reaper_cv_;
     std::vector<std::unique_ptr<PooledConnection>> connections_;
     std::size_t created_ = 0;
     std::atomic<bool> running_{false};

@@ -26,19 +26,28 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
-FetchContent_Declare(
-    benchmark
-    GIT_REPOSITORY https://github.com/google/benchmark.git
-    GIT_TAG v1.9.1
-)
-FetchContent_MakeAvailable(benchmark)
+if(HYPERCACHE_BUILD_BENCHMARKS)
+    # Don't build benchmark's own tests; they try to download googletest at configure time.
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG v1.9.1
+    )
+    FetchContent_MakeAvailable(benchmark)
+endif()
 
 if(HYPERCACHE_BUILD_REDIS)
     FetchContent_Declare(
         hiredis
         GIT_REPOSITORY https://github.com/redis/hiredis.git
         GIT_TAG v1.2.0
+        # Checkout into a dir named "hiredis" so <hiredis/hiredis.h> resolves from its parent.
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/hiredis
     )
+    # Keep hiredis's own test suite out of our ctest run.
+    set(DISABLE_TESTS ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(hiredis)
 endif()
 
@@ -73,8 +82,8 @@ if(HYPERCACHE_BUILD_REDIS)
         src/cache/redis_cache_backend.cpp
         src/cache/redis_connection_pool.cpp
     )
-    target_include_directories(hypercache_redis PUBLIC include ${hiredis_SOURCE_DIR})
-    target_link_libraries(hypercache_redis PRIVATE hypercache_core hiredis::hiredis)
+    target_include_directories(hypercache_redis PUBLIC include ${CMAKE_BINARY_DIR}/_deps)
+    target_link_libraries(hypercache_redis PUBLIC hiredis::hiredis PRIVATE hypercache_core)
     target_compile_features(hypercache_redis PRIVATE cxx_std_20)
 endif()
 
@@ -85,6 +94,7 @@ if(HYPERCACHE_BUILD_SERVER)
     target_link_libraries(hypercache_server PRIVATE hypercache_core httplib::httplib nlohmann_json::nlohmann_json)
     if(HYPERCACHE_BUILD_REDIS)
         target_link_libraries(hypercache_server PRIVATE hypercache_redis)
+        target_compile_definitions(hypercache_server PRIVATE HYPERCACHE_BUILD_REDIS)
     endif()
     target_compile_features(hypercache_server PRIVATE cxx_std_20)
     target_include_directories(hypercache_server PRIVATE include ${httplib_SOURCE_DIR}/include)
@@ -92,28 +102,34 @@ endif()
 
 if(HYPERCACHE_BUILD_TESTS)
     enable_testing()
-    find_package(GTest QUIET)
-    if(GTest_FOUND)
-        add_executable(hypercache_tests
-            tests/cache/lru_cache_test.cpp
-            tests/cache/lru_cache_backend_test.cpp
-            tests/similarity/similarity_engine_test.cpp
-            tests/telemetry/telemetry_test.cpp
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    include(GoogleTest)
+
+    add_executable(hypercache_tests
+        tests/cache/lru_cache_test.cpp
+        tests/cache/lru_cache_backend_test.cpp
+        tests/similarity/similarity_engine_test.cpp
+        tests/telemetry/telemetry_test.cpp
+    )
+    target_link_libraries(hypercache_tests PRIVATE hypercache_core GTest::gtest_main)
+    gtest_discover_tests(hypercache_tests)
+
+    if(HYPERCACHE_BUILD_REDIS)
+        add_executable(hypercache_redis_tests
+            tests/cache/redis_cache_test.cpp
+            tests/cache/redis_cache_backend_test.cpp
+            tests/cache/redis_connection_pool_test.cpp
         )
-        target_link_libraries(hypercache_tests PRIVATE hypercache_core GTest::gtest_main)
-        if(HYPERCACHE_BUILD_REDIS)
-            target_link_libraries(hypercache_tests PRIVATE hypercache_redis)
-            add_executable(hypercache_redis_tests
-                tests/cache/redis_cache_test.cpp
-                tests/cache/redis_cache_backend_test.cpp
-                tests/cache/redis_connection_pool_test.cpp
-            )
-            target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
-        endif()
-        include(GoogleTest)
-        gtest_discover_tests(hypercache_tests)
-    else()
-        message(STATUS "GTest not found; unit tests will not be built")
+        target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
+        # All Redis tests share one server, so don't let ctest -j run them in parallel.
+        gtest_discover_tests(hypercache_redis_tests PROPERTIES RESOURCE_LOCK redis)
     endif()
 endif()
 
@@ -123,7 +139,7 @@ if(HYPERCACHE_BUILD_BENCHMARKS)
         benchmarks/similarity_benchmark.cpp
         benchmarks/telemetry_benchmark.cpp
     )
-    target_link_libraries(hypercache_benchmarks PRIVATE hypercache_core benchmark::benchmark)
+    target_link_libraries(hypercache_benchmarks PRIVATE hypercache_core benchmark::benchmark benchmark::benchmark_main)
     if(HYPERCACHE_BUILD_REDIS)
         target_link_libraries(hypercache_benchmarks PRIVATE hypercache_redis)
     endif()

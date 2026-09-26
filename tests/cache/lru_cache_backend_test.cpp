@@ -16,6 +16,27 @@ TEST(LruCacheBackend, PutGetRemove) {
     cache.remove("key1");
     result = cache.get("key1");
     EXPECT_FALSE(result.has_value());
+    EXPECT_FALSE(cache.exists("key1"));
+    EXPECT_EQ(cache.size(), 0);
+}
+
+TEST(LruCacheBackend, RemoveFreesSlot) {
+    hypercache::cache::LruCacheBackend cache(2);
+    cache.put("key1", "value1");
+    cache.put("key2", "value2");
+    cache.remove("key1");
+    cache.put("key3", "value3");
+    // key2 must survive: removing key1 freed a slot, so nothing gets evicted.
+    EXPECT_TRUE(cache.exists("key2"));
+    EXPECT_TRUE(cache.exists("key3"));
+    EXPECT_EQ(cache.size(), 2);
+}
+
+TEST(LruCacheBackend, RemoveMissingKeyIsNoop) {
+    hypercache::cache::LruCacheBackend cache(2);
+    cache.put("key1", "value1");
+    cache.remove("nope");
+    EXPECT_EQ(cache.size(), 1);
 }
 
 TEST(LruCacheBackend, Exists) {
@@ -81,9 +102,10 @@ TEST(LruCacheBackend, ConcurrentReadWrite) {
         thread.join();
     }
 
-    EXPECT_GT(successful_gets.load(), 0);
-    EXPECT_EQ(successful_puts.load(), num_threads * ops_per_thread / 2);
-    EXPECT_LE(cache.size(), 1000);
+    // Keys are never evicted (100 keys, capacity 1000), so every get must hit.
+    EXPECT_EQ(successful_gets.load() + successful_puts.load(), num_threads * ops_per_thread);
+    EXPECT_GT(successful_puts.load(), 0);
+    EXPECT_EQ(cache.size(), 100);
 }
 
 TEST(LruCacheBackend, ConcurrentEvictionUnderLoad) {
@@ -108,8 +130,10 @@ TEST(LruCacheBackend, ConcurrentEvictionUnderLoad) {
         thread.join();
     }
 
-    EXPECT_EQ(total_ops.load(), num_threads * ops_per_thread);
-    EXPECT_LE(cache.size(), 100);
+    // Other threads can evict a key between our put and get, so not every get hits.
+    EXPECT_GT(total_ops.load(), 0);
+    EXPECT_LE(total_ops.load(), num_threads * ops_per_thread);
+    EXPECT_EQ(cache.size(), 100);
 }
 
 TEST(LruCacheBackend, HighContentionSameKeys) {

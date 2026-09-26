@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd -r -u 1000 -m -s /bin/bash appuser
+    && useradd -r -m -s /bin/bash appuser
 
 WORKDIR /app
 
@@ -53,5 +53,6 @@ ENV CACHE_TYPE=lru \
     REDIS_POOL_MIN=2 \
     REDIS_POOL_MAX=10
 
+# The server reads the env vars above itself; extra CLI flags passed to
+# `docker run` still override them.
 ENTRYPOINT ["./hypercache_server"]
-CMD ["--cache", "${CACHE_TYPE}", "--redis-host", "${REDIS_HOST}", "--redis-port", "${REDIS_PORT}", "--redis-pool-min", "${REDIS_POOL_MIN}", "--redis-pool-max", "${REDIS_POOL_MAX}"]

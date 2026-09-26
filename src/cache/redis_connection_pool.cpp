@@ -13,36 +13,29 @@ RedisConnectionPool::~RedisConnectionPool() {
     stop();
 }
 
-RedisConnectionPool::RedisConnectionPool(RedisConnectionPool&& other) noexcept
-    : config_(std::move(other.config_)),
-      connections_(std::move(other.connections_)),
-      created_(other.created_.load()),
-      running_(other.running_.load()),
-      reaper_(std::move(other.reaper_)) {
-    other.running_ = false;
-}
-
-RedisConnectionPool& RedisConnectionPool::operator=(RedisConnectionPool&& other) noexcept {
-    if (this != &other) {
-        stop();
-        config_ = std::move(other.config_);
-        connections_ = std::move(other.connections_);
-        created_ = other.created_.load();
-        running_ = other.running_.load();
-        reaper_ = std::move(other.reaper_);
-        other.running_ = false;
-    }
-    return *this;
-}
-
 void RedisConnectionPool::start() {
     if (running_.exchange(true)) return;
-    ensure_min_connections();
+    try {
+        ensure_min_connections();
+    } catch (...) {
+        running_ = false;
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto& conn : connections_) redisFree(conn->context);
+        connections_.clear();
+        created_ = 0;
+        throw;
+    }
     reaper_ = std::thread(&RedisConnectionPool::reaper_loop, this);
 }
 
 void RedisConnectionPool::stop() {
     if (!running_.exchange(false)) return;
+    {
+        // Take the lock so the reaper can't miss the wakeup between its check and its wait.
+        std::lock_guard<std::mutex> lock(mutex_);
+    }
+    reaper_cv_.notify_all();
+    cv_.notify_all();
     if (reaper_.joinable()) reaper_.join();
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& conn : connections_) {
@@ -130,11 +123,11 @@ void RedisConnectionPool::return_connection(redisContext* ctx) {
 }
 
 void RedisConnectionPool::reaper_loop() {
+    std::unique_lock<std::mutex> lock(mutex_);
     while (running_) {
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+        reaper_cv_.wait_for(lock, std::chrono::seconds(10), [this] { return !running_; });
         if (!running_) break;
 
-        std::lock_guard<std::mutex> lock(mutex_);
         const auto now = std::chrono::steady_clock::now();
         auto it = connections_.begin();
         while (it != connections_.end()) {
