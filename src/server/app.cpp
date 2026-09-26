@@ -6,6 +6,7 @@
 #include "httplib.h"
 #include "nlohmann/json.hpp"
 
+#include <cstdlib>
 #include <string>
 #include <sstream>
 #include <functional>
@@ -212,9 +213,30 @@ void App::stop() {
 
 } // namespace hypercache::server
 
+namespace {
+
+// Env vars set the defaults (used by Docker); CLI flags override them.
+void apply_env(hypercache::server::CacheConfig& cache_config) {
+    if (const char* v = std::getenv("CACHE_TYPE")) {
+        std::string cache_type = v;
+        if (cache_type == "redis") {
+            cache_config.type = hypercache::server::CacheBackendType::Redis;
+        } else if (cache_type == "lru") {
+            cache_config.type = hypercache::server::CacheBackendType::LRU;
+        }
+    }
+    if (const char* v = std::getenv("REDIS_HOST")) cache_config.redis_host = v;
+    if (const char* v = std::getenv("REDIS_PORT")) cache_config.redis_port = std::stoi(v);
+    if (const char* v = std::getenv("REDIS_POOL_MIN")) cache_config.redis_pool_min = std::stoull(v);
+    if (const char* v = std::getenv("REDIS_POOL_MAX")) cache_config.redis_pool_max = std::stoull(v);
+}
+
+} // namespace
+
 int main(int argc, char* argv[]) {
     unsigned short port = 18080;
     hypercache::server::CacheConfig cache_config;
+    apply_env(cache_config);
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];

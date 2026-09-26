@@ -266,18 +266,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
-          choco install redis-64 -y
-
-      - name: Start Redis
-        run: |
-          Start-Service redis
-          redis-cli ping
-
+      # No Redis on Windows: hiredis/MSVC isn't supported yet, so build and test the LRU path only.
       - name: Configure CMake
-        run: cmake -B build ${{ env.CMAKE_OPTIONS }}
+        run: cmake -B build -DHYPERCACHE_BUILD_SERVER=ON -DHYPERCACHE_BUILD_REDIS=OFF -DHYPERCACHE_BUILD_TESTS=ON -DHYPERCACHE_BUILD_BENCHMARKS=ON
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j

@@ -46,6 +46,8 @@ if(HYPERCACHE_BUILD_REDIS)
         # Checkout into a dir named "hiredis" so <hiredis/hiredis.h> resolves from its parent.
         SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/hiredis
     )
+    # Keep hiredis's own test suite out of our ctest run.
+    set(DISABLE_TESTS ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(hiredis)
 endif()
 
@@ -126,7 +128,8 @@ if(HYPERCACHE_BUILD_TESTS)
             tests/cache/redis_connection_pool_test.cpp
         )
         target_link_libraries(hypercache_redis_tests PRIVATE hypercache_redis GTest::gtest_main)
-        gtest_discover_tests(hypercache_redis_tests)
+        # All Redis tests share one server, so don't let ctest -j run them in parallel.
+        gtest_discover_tests(hypercache_redis_tests PROPERTIES RESOURCE_LOCK redis)
     endif()
 endif()
 
