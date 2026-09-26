@@ -1,0 +1,83 @@
+oh the struggle
+===============
+
+ok so. honest list of what's left in hypercache-llm and where i'm actually stuck.
+full bug details live in bugs_debugs.md, this is more like the real talk version.
+
+
+where things are rn
+-------------------
+- branch fix/build-and-ci, PR #1 is open
+- code finally compiles (redis, server, benchmarks never did before lol)
+- 37 tests pass locally
+- first real CI run: tsan, valgrind, benchmarks passed. 3 jobs red (build-and-test, asan, windows)
+- fixes for those 3 are sitting uncommitted in my working tree, not tested yet
+- #9 docker env vars is half done, also uncommitted
+
+
+what's left (bugs)
+------------------
+[ ] #25  asan fails on hiredis's OWN tests, not mine. fix drafted (DISABLE_TESTS)
+[ ] #26  redis Size test flaky bc ctest -j runs redis tests in parallel on one redis. fix drafted (RESOURCE_LOCK)
+[ ] #7   windows ci, no redis service on the runner. fix drafted (build windows w/o redis). still no idea if msvc even compiles the rest
+[ ] #9   docker ignores CACHE_TYPE etc. server reads env vars now, need to actually run the container and check
+[ ] #24  docker image never built at all (uid 1000 already taken on ubuntu 24.04). fixed locally, not pushed
+[ ] #11  redis crashes/breaks if a connection dies or redis restarts. pool never reconnects
+[ ] #12  simd "runtime dispatch" is a lie. it's compile time + -mavx2 everywhere, so it crashes on cpus without avx2. and the "sse" path uses fma lmao
+[ ] #13  server can't be stopped. stop() just flips a bool. no ctrl+c / sigterm handling
+[ ] #14  --port abc crashes the whole thing (stoi throws outside try)
+[ ] #15  telemetry is kinda fake. "request tokens" is just a request counter, endpoint stats never filled
+[ ] #16  httplib pinned to master (will randomly break one day), dead COMPILE_FLAGS line
+
+
+what's left (the actual product)
+--------------------------------
+this is the part that scares me tbh. right now it's a key-value cache with an http api. the README says "llm gateway" and that's... not true yet.
+
+[ ] no llm proxy at all. nothing forwards to openai / anthropic / anyone
+[ ] no semantic cache. /similarity is just a math endpoint sitting alone, nothing embeds prompts or checks "have i answered something close to this before"
+[ ] /stream is 3 hardcoded lines, not real streaming
+[ ] no real token counting (no tokenizer)
+[ ] no ttl on the lru cache. redis has set_ttl but the backend doesn't expose it
+[ ] no auth, no rate limiting, no config file
+[ ] no real server tests. only curl calls in ci
+[ ] README oversells everything (asan/tsan/valgrind "clean", windows ci, runtime dispatch). need to tone it down or make it true
+
+
+where i'm struggling
+--------------------
+1. ci / cmake hell
+   burned like 20 commits thinking it was the cmake version. it wasn't. it was google-benchmark trying to download googletest. the error message pointed me the wrong way and i kept guessing instead of reading the log properly.
+   lesson: read the actual failing line before touching anything.
+
+2. i can't build on my own machine
+   no c++ compiler on my windows box. everything goes through a docker ubuntu container or ci. every check = minutes of waiting. slow feedback loop = i guess more and verify less.
+   maybe: install msvc build tools or wsl so i can build locally.
+
+3. stuff that "works" but was never actually run
+   the README says tests pass, sanitizers clean etc but ci never got past configure. so none of it was ever checked. redis code never compiled. docker image never built. finding this out one layer at a time is kinda demoralizing ngl.
+
+4. redis + concurrency stuff
+   connection pool, reaper thread, locks, condition variables. this is where the subtle bugs live (the reaper blocking stop() for 10s, moving an object a thread still points at, tests racing each other under ctest -j). hard to see just by reading the code, and it only shows up under parallel runs.
+
+5. windows / msvc
+   haven't seen it compile even once. hiredis on msvc is its own mess. idk how much i care about windows vs just saying linux-only for now.
+
+6. simd dispatch (#12)
+   doing real runtime cpu detection + target attributes per compiler (gcc/clang vs msvc) is new territory for me. easy to get something that compiles fine and then crashes on someone else's cpu.
+
+7. the big picture
+   the actual "llm gateway + semantic cache" part doesn't exist yet and it's the whole point of the project. i've been fixing plumbing. need to decide the design: which llm api(s) to proxy, where embeddings come from (call an api? local model?), what similarity threshold counts as a cache hit, how to store vectors (in memory? redis?).
+
+
+next steps when i come back
+---------------------------
+1. verify the drafted fixes (#25 #26 #7) -> commit -> push -> get PR #1 green
+2. finish #9 + #24 (run the docker image both ways)
+3. merge PR #1
+4. #11 #13 #14 (stability stuff)
+5. #12 #15 #16
+6. sit down and actually design the gateway + semantic cache
+7. fix the README so it stops lying
+
+also: auto-fix is still on for PR #1 in the app. turn it off if i don't want stuff auto-pushed.

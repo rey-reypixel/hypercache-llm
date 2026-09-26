@@ -1,0 +1,94 @@
+what was i thinking
+===================
+
+pieced together from the git history and the first README. the plan vs what actually exists right now.
+
+
+the original plan (aug 19, 2026, first commit)
+----------------------------------------------
+"high-performance llm telemetry and cache gateway built with c++20"
+
+the idea: a thing that sits in front of llm apis. your app calls hypercache, hypercache calls openai/anthropic/whoever, and on the way it:
+
+- counts tokens for normal requests and streaming responses
+- caches prompts + embeddings in a thread-safe lru cache, so repeat questions don't cost api calls
+- does fast simd vector similarity, so "close enough" prompts can hit the cache too (semantic caching)
+- serves a rest api + server-sent events (sse) for streaming
+- uses redis so multiple instances can share one cache
+- has googletest coverage for the cache incl. concurrent access
+- was going to use crow for the http server
+- license: agpl community edition + paid commercial license
+
+
+how it actually went
+--------------------
+aug 19       readme + license. just the idea on paper.
+sep 8        first real code: lru cache, similarity engine, telemetry, tests. then the rest/sse server.
+             switched crow -> cpp-httplib.
+sep 22       big day. redis client, backend abstraction (lru or redis), connection pool, json, docker,
+             prometheus metrics, github actions ci.
+             then added simd, 32-thread stress tests, benchmarks, asan/valgrind/tsan jobs.
+sep 22       ~20 commits fighting cmake versions in ci. wrong problem the whole time.
+sep 23-26    actually debugging: found most of the code had never compiled, fixed it, first real ci run.
+
+
+what it actually is right now
+-----------------------------
+honestly: a c++ key-value cache with an http api, plus some side features.
+
+works:
+- lru cache (in memory, thread safe) with get/put/delete over http
+- redis backend with a connection pool, and --cache redis actually works now
+- cosine similarity endpoint (/similarity) with avx2/sse code paths
+- counters at /telemetry, /metrics (prometheus), /metrics/json
+- 37 unit tests, and they genuinely run and pass now
+- tsan + valgrind + benchmark ci jobs passed on the first real run
+
+half there / broken:
+- /stream is a 3-line hardcoded demo, not real streaming
+- "token" telemetry just counts requests
+- simd "runtime dispatch" is really compile-time, and needs avx2 or it crashes
+- docker image only just started building. env vars fix is drafted, not verified
+- ci still has 3 red jobs (fixes drafted, not verified)
+- server can't shut down cleanly, bad cli args crash it, redis doesn't reconnect
+
+doesn't exist at all:
+- the gateway part. nothing forwards anything to an llm api. this was THE point
+- semantic caching. similarity and cache are two separate things that never talk to each other
+- embeddings (nothing generates them)
+- real token counting / tokenizer
+- ttl / expiry on lru entries
+- auth, rate limiting, config file
+
+
+plan vs reality, side by side
+-----------------------------
+sit in front of llm apis ............ no. there's no proxy
+token telemetry ..................... sort of. counters exist, "tokens" are really request counts
+lru cache for prompts/embeddings .... yes for plain key/value. no prompt or embedding awareness
+simd similarity ..................... yes, but dispatch is compile-time and it's not wired to anything
+rest + sse .......................... rest yes. sse is a demo
+redis shared cache .................. yes (as of this week)
+googletest + concurrency tests ...... yes, and they actually run now
+crow ................................ swapped for cpp-httplib (fine, good call)
+extra stuff not in the original plan: docker, prometheus, benchmarks, asan/tsan/valgrind ci
+
+
+what i think happened
+---------------------
+- built outward instead of down. added features (redis pool, prometheus, benchmarks, sanitizers) before the core idea (proxy + semantic cache) existed.
+- the readme said "verified" before anything had been run.
+- never saw it compile on my own machine, so i didn't notice it was broken.
+- the pieces are real and some are decent (the lru cache, the pool once fixed, the test setup). they just aren't connected into the thing i set out to make.
+
+
+if i want it to be the original idea
+------------------------------------
+the smallest version that's actually an "llm cache gateway":
+1. POST /v1/chat -> forward to one llm api (pick one), return the answer
+2. before forwarding, check the cache for an exact prompt match -> return cached answer on hit
+3. then semantic: embed the prompt, compare with cached embeddings using the simd similarity, hit if above a threshold
+4. count real tokens from the api's usage field (free, no tokenizer needed)
+5. make the readme say exactly what's true and nothing more
+
+everything else (redis, prometheus, docker) already exists and can plug into that.
